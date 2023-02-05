@@ -17,26 +17,60 @@ pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         syn::ReturnType::Type(_, ty) => type_to_string(ty),
     };
 
+    let template_args = input_fn
+        .sig
+        .generics
+        .type_params()
+        .map(|ty| ty.ident.to_string())
+        .map(|ty| quote! { #ty.to_string() })
+        .collect::<Vec<_>>();
+
     let info_name = format_ident!("_get_ive_node_info_{}", name);
-    let outputname = format_ident!("output");
+    let outputname = "output";
+
+    let inputs = input_fn.sig.inputs.iter().map(|arg| {
+        let name = arg
+            .to_token_stream()
+            .to_string()
+            .split(":")
+            .next()
+            .unwrap()
+            .trim()
+            .to_string();
+        let ty = match arg {
+            syn::FnArg::Typed(ty) => type_to_string(&ty.ty),
+            _ => "void".to_string(),
+        };
+       
+        quote! {
+            TypeDef {
+                name: #name.to_string(),
+                ty: #ty.to_string(),
+                template_args: vec![
+                ],
+            }
+        }
+    }).collect::<Vec<_>>();
 
     quote!(
        #input_fn
 
        fn #info_name() -> Node {
             Node {
-                name:"foo".to_string(),
+                name: #name.to_string(),
                 inputs: vec![
-
+                    #(#inputs),*
                 ],
                 outputs: vec![
-                    // TypeDef {
-                    //     name: #outputname,
-                    //     ty: #return_type,
-                    //     template_args: vec![],
-                    // }
+                    TypeDef {
+                        name: #outputname.to_string(),
+                        ty: #return_type.to_string(),
+                        template_args: vec![],
+                    }
                 ],
-                template_args: vec![],
+                template_args: vec![
+                    #(#template_args),*
+                ],
             }
        }
     )
