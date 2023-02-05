@@ -90,6 +90,23 @@ fn test_template() {
     println!("{:#?}", node);
 }
 
+#[derive(Debug, Copy)]
+struct Dummy {
+    x: u32,
+}
+fn take_ownership(x: Dummy) -> u32 {
+    x.x
+}
+
+#[test]
+fn test_copyable() {    
+    let d = Dummy { x: 5 };
+    let _ : Clone = d;
+    let r = take_ownership(d);
+    assert_eq!(r, 5);
+    //let v = take_ownership(d);
+}
+
 #[test]
 fn test_quote() {
     let ast = quote!(
@@ -141,7 +158,7 @@ fn test_quote() {
                             // let ty = &ty.segments;
                             // let ty = &ty[0];
                             // let ty = &ty.ident;
-                            ty.to_token_stream().to_string()
+                            format!("& {}",ty.to_token_stream())
                         },
                         _ => panic!("not a path"),
                     }
