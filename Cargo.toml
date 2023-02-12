@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    #"app",
+    #"ive",
+    #"raw_test",
+    "prototype_network",
+    "sample_nodes",
+]
