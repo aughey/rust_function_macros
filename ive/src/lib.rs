@@ -6,6 +6,15 @@ fn type_to_string(kind: &Type) -> String {
     kind.to_token_stream().to_string()
 }
 
+#[proc_macro]
+pub fn run_node(input: TokenStream) -> TokenStream {
+    let _args = parse_macro_input!(input as syn::Expr);
+
+    quote!({
+        
+    }).into()
+}
+
 #[proc_macro_attribute]
 pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);

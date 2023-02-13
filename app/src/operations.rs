@@ -1,17 +1,3 @@
-use ive::ive_nodes;
-
-ive_nodes!{
-    pub fn john_one() -> f64 {
-        1.0
-    }
-    pub fn john_two() -> f64 {
-        2.0
-    }
-    pub fn john_add(x: f64, y: f64) -> f64 {
-        x + y
-    }
-}
-
 pub fn two() -> f64 {
     2.0
 }
@@ -70,8 +56,5 @@ mod tests {
         assert_eq!(add_one(1), 2);
     }
 
-    #[test]
-    fn test_john_one() {
-        assert_eq!(john_one(), 1.0);
-    }
+ 
 }

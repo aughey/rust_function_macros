@@ -90,7 +90,7 @@ fn test_template() {
     println!("{:#?}", node);
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Dummy {
     x: u32,
 }
@@ -101,10 +101,17 @@ fn take_ownership(x: Dummy) -> u32 {
 #[test]
 fn test_copyable() {    
     let d = Dummy { x: 5 };
-    let _ : Clone = d;
     let r = take_ownership(d);
     assert_eq!(r, 5);
     //let v = take_ownership(d);
+}
+
+#[test]
+fn test_expression_quote() {
+    let ast = quote!(run(foo,bar,blech,[], [one]));
+    assert!(!ast.to_string().is_empty());
+
+    
 }
 
 #[test]
