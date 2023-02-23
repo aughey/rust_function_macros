@@ -146,6 +146,55 @@ fn manual_dirty(state: &mut ManualOptionalStore, dirty: &mut DirtyState) {
     }
 }
 
+// Do a tree
+// one
+//  \
+//   \----add
+//   /
+//  /
+// two
+#[derive(Default)]
+struct TreeDirty {
+    one: DirtyEnum,
+    two: DirtyEnum,
+    add: DirtyEnum,
+}
+
+#[derive(Default)]
+struct TreeState {
+    one: Option<i32>,
+    two: Option<i32>,
+    add: Option<i32>,
+}
+
+fn manual_tree(state: &mut TreeState, dirty: &mut TreeDirty) {
+    if dirty.one != DirtyEnum::Clean {
+        state.one = {
+            dirty.one = DirtyEnum::Clean;
+            dirty.add = DirtyEnum::Dirty;
+            Some(one())
+        }
+    }
+
+    if dirty.two != DirtyEnum::Clean {
+        state.two = {
+            dirty.two = DirtyEnum::Clean;
+            dirty.add = DirtyEnum::Dirty;
+            Some(two())
+        }
+    }
+
+    if dirty.add != DirtyEnum::Clean {
+        state.add = if let (Some(one), Some(two)) = (state.one, state.two) {
+            dirty.add = DirtyEnum::Clean;
+            Some(add(one, two))
+        } else {
+            None
+        }
+    }
+
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -188,5 +237,14 @@ mod tests {
         manual_dirty(&mut state, &mut dirty);
 
         assert_eq!(state.int_to_string_value, Some("4".into()));
+    }
+
+    #[test]
+    fn test_manual_tree() {
+        let mut state = TreeState::default();
+        let mut dirty = TreeDirty::default();
+        manual_tree(&mut state, &mut dirty);
+
+        assert_eq!(state.add, Some(3));
     }
 }

@@ -1,3 +1,5 @@
+pub mod tree;
+
 #[derive(Default)]
 pub struct MutInt {
     value: i32,
@@ -7,8 +9,20 @@ pub struct MutIntNoDefault {
     value: i32,
 }
 
+pub fn one() -> i32 {
+    1
+}
+
+pub fn two() -> i32 {
+    2
+}
+
 pub fn three() -> i32 {
     3
+}
+
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
 }
 
 pub fn mutable_int(value: i32) -> MutInt {
