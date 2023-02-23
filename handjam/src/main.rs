@@ -73,13 +73,14 @@ fn manual_option_persist_with_if_let(state: &mut ManualOptionalStore) -> String 
 
 #[derive(PartialEq)]
 enum DirtyEnum {
-    Dirty,
+    NeedCompute,
+    Stale,
     Clean,
 }
 
 impl Default for DirtyEnum {
     fn default() -> Self {
-        DirtyEnum::Dirty
+        DirtyEnum::NeedCompute
     }
 }
 
@@ -93,47 +94,50 @@ struct DirtyState {
 }
 
 fn manual_dirty(state: &mut ManualOptionalStore, dirty: &mut DirtyState) {
-    if dirty.three != DirtyEnum::Clean {
+    if dirty.three == DirtyEnum::NeedCompute {
         // No dependencies to check, but we'll stay with the form
         state.three_value = {
             dirty.three = DirtyEnum::Clean;
-            // dirty children
-            dirty.mut_int = DirtyEnum::Dirty;
             Some(three())
-        } // No else, it must succeed
+        }; // no else, it just works
+        // dirty children
+        dirty.mut_int = DirtyEnum::NeedCompute;
     }
 
-    if dirty.mut_int != DirtyEnum::Clean {
+    if dirty.mut_int == DirtyEnum::NeedCompute {
         state.mut_int = if let Some(three_value) = state.three_value {
             dirty.mut_int = DirtyEnum::Clean;
-            dirty.tick = DirtyEnum::Dirty;
             Some(mutable_int_no_default(three_value))
         } else {
+            dirty.mut_int = DirtyEnum::Stale;
             None
-        }
+        };
+        dirty.tick = DirtyEnum::NeedCompute;
     }
 
-    if dirty.tick != DirtyEnum::Clean {
+    if dirty.tick == DirtyEnum::NeedCompute {
         state.tick_value = if let Some(mut_int) = state.mut_int.as_mut() {
             dirty.tick = DirtyEnum::Clean;
-            dirty.int_to_string = DirtyEnum::Dirty;
             Some(tick_no_default(mut_int))
         } else {
+            dirty.tick = DirtyEnum::Stale;
             None
-        }
+        };
+        dirty.int_to_string = DirtyEnum::NeedCompute;
     }
 
-    if dirty.int_to_string != DirtyEnum::Clean {
+    if dirty.int_to_string == DirtyEnum::NeedCompute {
         state.int_to_string_value = if let Some(tick_value) = state.tick_value {
             dirty.int_to_string = DirtyEnum::Clean;
-            dirty.print = DirtyEnum::Dirty;
             Some(int_to_string(tick_value))
         } else {
+            dirty.int_to_string = DirtyEnum::Stale;
             None
-        }
+        };
+        dirty.print = DirtyEnum::NeedCompute;
     }
 
-    if dirty.print != DirtyEnum::Clean {
+    if dirty.print == DirtyEnum::NeedCompute {
         state.print_value = if let Some(int_to_string_value) = state.int_to_string_value.as_ref() {
             // Again, we have to compute this slice inside here because we don't know if the dependencies are valid
             let string_slice_value = string_slice(int_to_string_value);
@@ -141,6 +145,7 @@ fn manual_dirty(state: &mut ManualOptionalStore, dirty: &mut DirtyState) {
             dirty.print = DirtyEnum::Clean;
             Some(())
         } else {
+            dirty.print = DirtyEnum::Stale;
             None
         }
     }
@@ -168,31 +173,111 @@ struct TreeState {
 }
 
 fn manual_tree(state: &mut TreeState, dirty: &mut TreeDirty) {
-    if dirty.one != DirtyEnum::Clean {
+    if dirty.one == DirtyEnum::NeedCompute {
         state.one = {
             dirty.one = DirtyEnum::Clean;
-            dirty.add = DirtyEnum::Dirty;
             Some(one())
-        }
+        };
+        dirty.add = DirtyEnum::NeedCompute;
     }
 
-    if dirty.two != DirtyEnum::Clean {
+    if dirty.two == DirtyEnum::NeedCompute {
         state.two = {
             dirty.two = DirtyEnum::Clean;
-            dirty.add = DirtyEnum::Dirty;
             Some(two())
-        }
+        };
+        dirty.add = DirtyEnum::NeedCompute;
     }
 
-    if dirty.add != DirtyEnum::Clean {
+    if dirty.add == DirtyEnum::NeedCompute {
         state.add = if let (Some(one), Some(two)) = (state.one, state.two) {
             dirty.add = DirtyEnum::Clean;
             Some(add(one, two))
         } else {
+            dirty.add = DirtyEnum::Stale;
+            None
+        }
+    }
+}
+
+#[derive(Default)]
+struct TreeStateWithOptional {
+    one: Option<i32>,
+    two: Option<Option<i32>>,
+    add: Option<i32>,
+}
+
+fn tree_with_optional_node(state: &mut TreeStateWithOptional, dirty: &mut TreeDirty) {
+    if dirty.one == DirtyEnum::NeedCompute {
+        state.one = {
+            dirty.one = DirtyEnum::Clean;
+            Some(one())
+        };
+        dirty.add = DirtyEnum::NeedCompute;
+    }
+
+    if dirty.two == DirtyEnum::NeedCompute {
+        state.two = {
+            dirty.two = DirtyEnum::Clean;
+            Some(two_optional())
+        };
+        dirty.add = DirtyEnum::NeedCompute;
+    }
+
+    if dirty.add == DirtyEnum::NeedCompute {
+        state.add = if let (Some(one), Some(Some(two))) = (state.one, state.two) {
+            dirty.add = DirtyEnum::Clean;
+            Some(add(one, two))
+        } else {
+            dirty.add = DirtyEnum::Stale;
+            None
+        }
+    }
+}
+
+struct TreeStateWithResult {
+    one: Option<Result<i32, ()>>,
+    two: Option<i32>,
+    add: Option<i32>,
+}
+
+fn tree_with_result_node(state: &mut TreeStateWithResult, dirty: &mut TreeDirty) {
+    if dirty.one == DirtyEnum::NeedCompute {
+        state.one = {
+            dirty.one = DirtyEnum::Clean;
+            Some(one_result())
+        };
+        dirty.add = DirtyEnum::NeedCompute;
+    }
+
+    if dirty.two == DirtyEnum::NeedCompute {
+        state.two = {
+            dirty.two = DirtyEnum::Clean;
+            Some(two())
+        };
+        dirty.add = DirtyEnum::NeedCompute;
+    }
+
+    if dirty.add == DirtyEnum::NeedCompute {
+        state.add = if let (Some(Ok(one)), Some(two)) = (state.one, state.two) {
+            dirty.add = DirtyEnum::Clean;
+            Some(add(one, two))
+        } else {
+            dirty.add = DirtyEnum::Stale;
             None
         }
     }
 
+    // What's the generic of this look like?
+    // if THIS_NODE_NEEDS_COMPUTE {
+    //     NODE_STATE = IF_GET_INPUTS {
+    //       COMPUTE_STATE = CLEAN;
+    //       Some(run_node(INPUTS))
+    //     } OPTIONAL_ELSE {
+    //       COMPUTE_STATE = STALE;
+    //       None
+    //     }
+    // }
 }
 
 fn main() {
@@ -244,6 +329,15 @@ mod tests {
         let mut state = TreeState::default();
         let mut dirty = TreeDirty::default();
         manual_tree(&mut state, &mut dirty);
+
+        assert_eq!(state.add, Some(3));
+    }
+
+    #[test]
+    fn test_tree_with_optional_node() {
+        let mut state = TreeStateWithOptional::default();
+        let mut dirty = TreeDirty::default();
+        tree_with_optional_node(&mut state, &mut dirty);
 
         assert_eq!(state.add, Some(3));
     }

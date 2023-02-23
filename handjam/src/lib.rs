@@ -17,6 +17,14 @@ pub fn two() -> i32 {
     2
 }
 
+pub fn two_optional() -> Option<i32> {
+    Some(2)
+}
+
+pub fn one_result() -> Result<i32, ()> {
+    Ok(1)
+}
+
 pub fn three() -> i32 {
     3
 }
