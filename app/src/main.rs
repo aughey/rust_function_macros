@@ -1,4 +1,4 @@
-use app::{operations, run_operation, run_operation_new, exec};
+use app::{operations, run_operation, exec};
 use ive::run_node;
 
 fn main() {
