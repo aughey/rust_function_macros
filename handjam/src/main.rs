@@ -100,7 +100,7 @@ fn manual_dirty(state: &mut ManualOptionalStore, dirty: &mut DirtyState) {
             dirty.three = DirtyEnum::Clean;
             Some(three())
         }; // no else, it just works
-        // dirty children
+           // dirty children
         dirty.mut_int = DirtyEnum::NeedCompute;
     }
 
@@ -269,8 +269,23 @@ fn tree_with_result_node(state: &mut TreeStateWithResult, dirty: &mut TreeDirty)
     }
 
     // What's the generic of this look like?
+
+    // COMPUTE_STATE = HAS_INPUTS_COMPUTE | NO_INPUTS_COMPUTE
+    // HAS_INPUTS_COMPUTE = IF_GET_INPUTS {
+    //   COMPUTE_STATE = CLEAN;
+    //   Some(run_node(INPUTS))
+    // } ELSE {
+    //   COMPUTE_STATE = STALE;
+    //   None
+    // }
+    // NO_INPUTS_COMPUTE = {
+    //   COMPUTE_STATE = CLEAN;
+    //   Some(run_node())
+    // }
+
     // if THIS_NODE_NEEDS_COMPUTE {
-    //     NODE_STATE = IF_GET_INPUTS {
+    //     NODE_STATE = {
+    //       IF_GET_INPUTS {
     //       COMPUTE_STATE = CLEAN;
     //       Some(run_node(INPUTS))
     //     } OPTIONAL_ELSE {
