@@ -295,6 +295,30 @@ fn tree_with_result_node(state: &mut TreeStateWithResult, dirty: &mut TreeDirty)
     // }
 }
 
+fn tree_with_macros(state: &mut TreeState, dirty: &mut TreeDirty) {
+    run_operation!(
+        runstate: dirty.one,
+        output: state.one,
+        function: one,
+        children: dirty.add
+    );
+
+    run_operation!(
+        runstate: dirty.two,
+        output: state.two,
+        function: two,
+        children: dirty.add
+    );
+
+    run_operation!(
+        runstate: dirty.add,
+        output: state.add,
+        inputs: (one,two) = (state.one, state.two),
+        function: add,
+        children:
+    );
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -353,6 +377,15 @@ mod tests {
         let mut state = TreeStateWithOptional::default();
         let mut dirty = TreeDirty::default();
         tree_with_optional_node(&mut state, &mut dirty);
+
+        assert_eq!(state.add, Some(3));
+    }
+
+    #[test]
+    fn test_tree_with_macros() {
+        let mut state = TreeState::default();
+        let mut dirty = TreeDirty::default();
+        tree_with_macros(&mut state, &mut dirty);
 
         assert_eq!(state.add, Some(3));
     }
