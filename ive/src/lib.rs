@@ -7,6 +7,15 @@ fn type_to_string(kind: &Type) -> String {
 }
 
 #[proc_macro]
+pub fn ive_chain(input: TokenStream) -> TokenStream {
+    let _args = parse_macro_input!(input as syn::);
+
+    quote!({
+        
+    }).into()
+}
+
+#[proc_macro]
 pub fn run_node(input: TokenStream) -> TokenStream {
     let _args = parse_macro_input!(input as syn::Expr);
 
