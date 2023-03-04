@@ -49,7 +49,7 @@ macro_rules! run_operation {
             } else {
                 $runstate = DirtyEnum::Stale;
                 None
-            }
+            };
             $( $children = DirtyEnum::NeedCompute; )*
         }
     };

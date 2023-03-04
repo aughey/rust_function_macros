@@ -56,7 +56,7 @@ pub fn int_to_string(value: i32) -> String {
     value.to_string()
 }
 
-pub fn string_slice(string: &String) -> &str {
+pub fn string_slice(string: &str) -> &str {
     &string[..]
 }
 

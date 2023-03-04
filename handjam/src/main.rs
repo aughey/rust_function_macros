@@ -44,7 +44,7 @@ struct ManualOptionalStore {
 fn manual_optional_persist_with_unwrap(state: &mut ManualOptionalStore) -> String {
     state.three_value = Some(three());
     state.mut_int = Some(mutable_int_no_default(state.three_value.unwrap()));
-    state.tick_value = Some(tick_no_default(&mut state.mut_int.as_mut().unwrap()));
+    state.tick_value = Some(tick_no_default(state.mut_int.as_mut().unwrap()));
     state.int_to_string_value = Some(int_to_string(state.tick_value.unwrap()));
     let string_slice_value = string_slice(state.int_to_string_value.as_ref().unwrap());
     print(string_slice_value);
