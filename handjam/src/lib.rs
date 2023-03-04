@@ -65,7 +65,7 @@ pub fn int_to_string(value: i32) -> String {
 }
 
 pub fn string_slice(string: &str) -> &str {
-    &string[1..]
+    &string[..]
 }
 
 pub fn print(string: &str) {

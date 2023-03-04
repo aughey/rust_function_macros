@@ -18,7 +18,26 @@ pub trait ValidInputs {
     fn get<'a, T>(&self, index: usize) -> &'a T;
 }
 
-pub type BoxedAny = Box<dyn std::any::Any>;
+//pub type BoxedAny = Box<dyn std::any::Any>;
+pub struct BoxedAny {
+    any: Box<dyn std::any::Any>
+}
+impl BoxedAny {
+    fn new<T>(value: T) -> BoxedAny 
+    where T: 'static + std::any::Any
+    {
+        Self {
+            any: Box::new(value)
+        }
+    }
+
+    pub fn value<T>(&self) -> &T
+    where T: 'static + std::any::Any
+     {
+        self.any.downcast_ref::<T>().expect("Unable to downcast any to given type")
+    }
+}
+
 pub type AnyInputs<'a> = [&'a BoxedAny];
 pub trait DynCall {
     fn call(&self, inputs: &AnyInputs) -> BoxedAny;
@@ -32,7 +51,7 @@ fn zero() -> i32 {
 struct ZeroAsDynCall;
 impl DynCall for ZeroAsDynCall {
     fn call(&self, _inputs: &AnyInputs) -> BoxedAny {
-        Box::new(zero())
+        BoxedAny::new(zero())
     }
     fn input_len(&self) -> usize {
         0
@@ -45,7 +64,7 @@ struct OneAsDynCall {
 
 impl DynCall for OneAsDynCall {
     fn call(&self, _inputs: &AnyInputs) -> BoxedAny {
-        Box::new(one())
+        BoxedAny::new(one())
     }
     fn input_len(&self) -> usize {
         0
@@ -56,8 +75,8 @@ struct AddOneAsDynCall;
 
 impl DynCall for AddOneAsDynCall {
     fn call(&self, inputs: &AnyInputs) -> BoxedAny {
-        let a = inputs[0].downcast_ref::<i32>().unwrap();
-        Box::new(add_one(*a))
+        let a = inputs[0].value::<i32>();
+        BoxedAny::new(add_one(*a))
     }
     fn input_len(&self) -> usize {
         1
@@ -117,13 +136,22 @@ impl LinearExec {
             children: vec![Vec::new(); size]
         }
     }
+    pub fn new_linear_chain(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
+       let mut exec = Self::new(nodes);
+         for i in 1..exec.nodes.len() {
+            exec.inputs(i, vec![i - 1]);
+            exec.children(i - 1,vec![i]);
+         }
+         exec
+    }
     pub fn value_any(&self, index: usize) -> Option<&BoxedAny> {
         self.store.values.get(index)?.as_ref()
     }
     pub fn value<T>(& self, index: usize) -> Option<& T> 
         where T: Copy + 'static {
         let any = self.value_any(index)?;
-        any.downcast_ref::<T>()
+        // We use expect here because this is a critical error that needs to properly panic
+        Some(any.value::<T>())
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -187,14 +215,7 @@ pub fn generate_linear_exec(count: usize) -> LinearExec {
 
     let concat = firstnode.into_iter().chain(nodes);
 
-    let mut le = LinearExec::new(concat);
-
-    for i in 0..count-1 {
-        le.children(i,vec![i+1]);
-        le.inputs(i+1,vec![i]);
-    }
-
-    le
+    LinearExec::new_linear_chain(concat)
 }
 
 #[cfg(test)]
@@ -240,7 +261,7 @@ mod tests {
 
         let value1 = store.values[1].as_ref();
         if let Some(value1) = value1 {
-            let value1_box = value1.downcast_ref::<i32>().unwrap();
+            let value1_box = value1.value::<i32>();
             assert_eq!(*value1_box, 2);
         } else {
             assert!(false);
@@ -254,9 +275,7 @@ mod tests {
 
         let nodes : Vec<Box<dyn DynCall>>= vec![Box::new(one_compute), Box::new(addone_compute)];
 
-        let mut exec = LinearExec::new(nodes.into_iter());
-        exec.children(0, vec![1]);
-        exec.inputs(1, vec![0]);
+        let mut exec = LinearExec::new_linear_chain(nodes.into_iter());
         
         let computed = exec.run();
 
@@ -264,7 +283,7 @@ mod tests {
     
         let value1 = exec.value_any(1);
         if let Some(value1) = value1 {
-            let value1_box = value1.downcast_ref::<i32>().unwrap();
+            let value1_box = value1.value::<i32>();
             assert_eq!(*value1_box, 2);
         } else {
             assert!(false);
@@ -282,8 +301,53 @@ mod tests {
         let mut exec = generate_linear_exec(CHAIN_LENGTH);
         let count = exec.run();
         assert_eq!(count,CHAIN_LENGTH);
-        assert_eq!(exec.value_any(9).unwrap().downcast_ref::<i32>(),Some(&9));
-        assert_eq!(exec.value_any(9).unwrap().downcast_ref::<i32>(),Some(&9));
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
+
+        exec.set_runnable(0);
+        let count = exec.run();
+        assert_eq!(count,CHAIN_LENGTH);
+    }
+
+    #[test]
+    fn test_dyn_string_ops() {
+
+        fn john_aughey() -> String{
+            "John Aughey".to_string()
+        }
+
+        fn string_double(input: &String) -> String {
+            input.to_owned() + input
+        }
+
+        struct JohnAugheyDyn;
+        impl DynCall for JohnAugheyDyn {
+            fn call(&self, _inputs: &[&BoxedAny]) -> BoxedAny {
+                BoxedAny::new(john_aughey())
+            }
+            fn input_len(&self) -> usize {
+                0
+            }
+        }
+
+        struct StringDoubleDyn;
+        impl DynCall for StringDoubleDyn {
+            fn call(&self, inputs: &[&BoxedAny]) -> BoxedAny {
+                BoxedAny::new(string_double(inputs[0].value::<String>()))
+            }
+            fn input_len(&self) -> usize {
+                0
+            }
+        }
+        
+        
+
+        const CHAIN_LENGTH: usize = 10;
+        let mut exec = generate_linear_exec(CHAIN_LENGTH);
+        let count = exec.run();
+        assert_eq!(count,CHAIN_LENGTH);
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
 
         exec.set_runnable(0);
         let count = exec.run();
