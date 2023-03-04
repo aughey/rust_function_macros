@@ -40,8 +40,9 @@ fn bench_dynamic(c: &mut Criterion) {
         exec.set_runnable(0);
          let count = exec.run();
          assert_eq!(count,CHAIN_LENGTH);
-         assert_eq!(exec.value(9).unwrap().downcast_ref::<i32>(),Some(&9));
-         assert_eq!(exec.value(99).unwrap().downcast_ref::<i32>(),Some(&99));
+         assert_eq!(exec.value::<i32>(21),Some(&21));
+         assert_eq!(exec.value_any(9).unwrap().downcast_ref::<i32>(),Some(&9));
+         assert_eq!(exec.value_any(99).unwrap().downcast_ref::<i32>(),Some(&99));
     }));
 }
 

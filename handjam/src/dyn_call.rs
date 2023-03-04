@@ -96,10 +96,12 @@ impl DynDirty {
 }
 
 type ChildrenIndices = Vec<usize>;
+type InputIndices = Vec<usize>;
 pub struct LinearExec {
     store: DynStorage,
     dirty: DynDirty,
     nodes: Vec<Box<dyn DynCall>>,
+    input_indices: Vec<InputIndices>,
     children: Vec<ChildrenIndices>,
 }
 
@@ -111,12 +113,19 @@ impl LinearExec {
             store: DynStorage::new(size),
             dirty: DynDirty::new(size),
             nodes: nodes,
+            input_indices: vec![Vec::new(); size],
             children: vec![Vec::new(); size]
         }
     }
-    pub fn value(&self, index: usize) -> Option<&BoxedAny> {
-        self.store.values[index].as_ref()
+    pub fn value_any(&self, index: usize) -> Option<&BoxedAny> {
+        self.store.values.get(index)?.as_ref()
     }
+    pub fn value<'a,T>(&'a self, index: usize) -> Option<&'a T> 
+        where T: Copy + 'static {
+        let any = self.value_any(index)?;
+        any.downcast_ref::<T>()
+    }
+
     pub fn run_state(&self, index: usize) -> DirtyEnum {
         self.dirty.state[index]
     }
@@ -135,6 +144,8 @@ impl LinearExec {
             if dirty.state[run_index] == DirtyEnum::NeedCompute {
                 let mut inputs = Vec::<&BoxedAny>::new();
                 let inputlen = node.input_len();
+                assert_eq!(inputlen, self.input_indices[run_index].len(), "Input indices not set correctly");
+
                 for _inputindex in 0..inputlen {
                     if let Some(value) = store.values[running_input_index].as_ref() {
                         inputs.push(value);
@@ -161,6 +172,10 @@ impl LinearExec {
     fn children(&mut self, index: usize, children: ChildrenIndices) {
         self.children[index] = children;
     }
+
+    fn inputs(&mut self, i: usize, indices: Vec<usize>) {
+        self.input_indices[i] = indices;
+    }
 }
 
 pub fn generate_linear_exec(count: usize) -> LinearExec {
@@ -176,6 +191,7 @@ pub fn generate_linear_exec(count: usize) -> LinearExec {
 
     for i in 0..count-1 {
         le.children(i,vec![i+1]);
+        le.inputs(i+1,vec![i]);
     }
 
     le
@@ -229,34 +245,34 @@ mod tests {
         } else {
             assert!(false);
         }
-        
     }
-
-   
 
     #[test]
     fn test_loop() {
         let one_compute = OneAsDynCall {};
         let addone_compute = AddOneAsDynCall {};
 
-        let mut exec = LinearExec {
-            store: DynStorage::new(2),
-            dirty: DynDirty::new(2),
-            nodes: vec![Box::new(one_compute), Box::new(addone_compute)],
-            children: vec![Vec::new();2]
-        };
+        let nodes : Vec<Box<dyn DynCall>>= vec![Box::new(one_compute), Box::new(addone_compute)];
 
+        let mut exec = LinearExec::new(nodes.into_iter());
+        exec.children(0, vec![1]);
+        exec.inputs(1, vec![0]);
+        
         let computed = exec.run();
 
         assert_eq!(computed, 2);
     
-        let value1 = exec.value(1);
+        let value1 = exec.value_any(1);
         if let Some(value1) = value1 {
             let value1_box = value1.downcast_ref::<i32>().unwrap();
             assert_eq!(*value1_box, 2);
         } else {
             assert!(false);
         }
+
+        exec.set_runnable(0);
+        let computed = exec.run();
+        assert_eq!(computed, 2);
         
     }
 
@@ -266,8 +282,8 @@ mod tests {
         let mut exec = generate_linear_exec(CHAIN_LENGTH);
         let count = exec.run();
         assert_eq!(count,CHAIN_LENGTH);
-        assert_eq!(exec.value(9).unwrap().downcast_ref::<i32>(),Some(&9));
-        assert_eq!(exec.value(9).unwrap().downcast_ref::<i32>(),Some(&9));
+        assert_eq!(exec.value_any(9).unwrap().downcast_ref::<i32>(),Some(&9));
+        assert_eq!(exec.value_any(9).unwrap().downcast_ref::<i32>(),Some(&9));
 
         exec.set_runnable(0);
         let count = exec.run();
