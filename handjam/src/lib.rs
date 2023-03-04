@@ -1,5 +1,6 @@
 pub mod macros;
 pub mod gentest;
+pub mod dyn_call;
 
 #[derive(Default)]
 pub struct MutInt {
@@ -8,6 +9,10 @@ pub struct MutInt {
 
 pub struct MutIntNoDefault {
     value: i32,
+}
+
+pub fn zero() -> i32 {
+    0
 }
 
 pub fn one() -> i32 {

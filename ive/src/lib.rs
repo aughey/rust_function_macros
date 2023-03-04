@@ -178,6 +178,7 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
     };
 
     let operations = countrange
+        .clone()
         .skip(1) // Skip the first one
         .map(|i| {
             let input_indices = &[i - 1];
@@ -226,6 +227,28 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
         quote!(compute_count += #chunkname(state, dirty);)
     });
 
+    let straightline_fn = {
+        let sl_name = format_ident!("{}_straightline", fnname);
+        let operations = countrange
+        .clone()
+        .skip(1) // Skip the first one
+        .map(|i| {
+            let input = format_ident!("value{}", i - 1);
+            let output = format_ident!("value{}", i);
+            let function = format_ident!("add_one");
+            quote!(state.#output = Some(#function(state.#input.unwrap()));)
+        });
+        quote!(
+            #[inline(never)]
+            pub fn #sl_name(state: &mut #statename, dirty: &mut #dirtyname) -> usize {
+                //let mut compute_count : usize = 0;
+                state.value0 = Some(zero());
+                #(#operations)*
+                #count // sort of cheating
+            }
+        )
+    };
+
     let out = quote! {
       #state_struct
       #dirty_struct
@@ -238,9 +261,10 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
         compute_count
       }
       #(#chunk_funcs)*
+      #straightline_fn
     };
 
-    // eprintln!("{}", out);
+//    eprintln!("{}", out);
 
     out.into()
 }
@@ -327,3 +351,4 @@ pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     )
     .into()
 }
+

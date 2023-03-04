@@ -42,4 +42,16 @@ mod tests {
         assert_eq!(count, CHAIN_LENGTH);
     }
 
+    #[test]
+    fn test_straightchain() {
+        let mut state = ChainState::default();
+        let mut dirty = ChainDirty::default();
+
+        state.value0 = Some(0);
+
+        let count = chain_straightline(&mut state, &mut dirty);
+
+        assert_eq!(state.value3, Some(3));
+        assert_eq!(count, CHAIN_LENGTH);
+    }
 }
