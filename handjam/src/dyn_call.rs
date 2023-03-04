@@ -95,10 +95,12 @@ impl DynDirty {
     }
 }
 
+type ChildrenIndices = Vec<usize>;
 pub struct LinearExec {
     store: DynStorage,
     dirty: DynDirty,
     nodes: Vec<Box<dyn DynCall>>,
+    children: Vec<ChildrenIndices>,
 }
 
 impl LinearExec {
@@ -108,7 +110,8 @@ impl LinearExec {
         Self {
             store: DynStorage::new(size),
             dirty: DynDirty::new(size),
-            nodes: nodes
+            nodes: nodes,
+            children: vec![Vec::new(); size]
         }
     }
     pub fn value(&self, index: usize) -> Option<&BoxedAny> {
@@ -127,7 +130,6 @@ impl LinearExec {
 
         let mut running_input_index = 0;
         let mut compute_count = 0usize;
-        let node_count = nodes.len();
         for (run_index,node) in nodes.iter().enumerate() {
             
             if dirty.state[run_index] == DirtyEnum::NeedCompute {
@@ -148,12 +150,16 @@ impl LinearExec {
                     dirty.state[run_index] = DirtyEnum::Stale;
                 }
                 // Run our children
-                if run_index+1 < node_count {
-                    dirty.state[run_index+1] = DirtyEnum::NeedCompute;
+                for child in self.children[run_index].iter() {
+                    dirty.state[*child] = DirtyEnum::NeedCompute;
                 }
             }
         }
         compute_count
+    }
+
+    fn children(&mut self, index: usize, children: ChildrenIndices) {
+        self.children[index] = children;
     }
 }
 
@@ -166,7 +172,13 @@ pub fn generate_linear_exec(count: usize) -> LinearExec {
 
     let concat = firstnode.into_iter().chain(nodes);
 
-    LinearExec::new(concat)
+    let mut le = LinearExec::new(concat);
+
+    for i in 0..count-1 {
+        le.children(i,vec![i+1]);
+    }
+
+    le
 }
 
 #[cfg(test)]
@@ -230,7 +242,8 @@ mod tests {
         let mut exec = LinearExec {
             store: DynStorage::new(2),
             dirty: DynDirty::new(2),
-            nodes: vec![Box::new(one_compute), Box::new(addone_compute)]
+            nodes: vec![Box::new(one_compute), Box::new(addone_compute)],
+            children: vec![Vec::new();2]
         };
 
         let computed = exec.run();
