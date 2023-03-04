@@ -11,7 +11,7 @@ fn bench_chain(c: &mut Criterion) {
         let count = chain(&mut state, &mut dirty);
         assert_eq!(count,CHAIN_LENGTH);
         assert_eq!(state.value9,Some(9));
-        dirty.reset(0);
+        dirty.set_needs_compute(0);
     };
 
     c.bench_function("chain", |b| b.iter(benchfn));

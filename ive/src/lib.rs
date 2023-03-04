@@ -83,8 +83,8 @@ where
     let output = format_ident!("value{}", index);
 
     let getdirtystate = quote!(dirty.state[#index]);
-    let setdirtyclean = quote!(dirty.state[#index] = DirtyEnum::Clean;);
-    let setdirtystale = quote!(dirty.state[#index] = DirtyEnum::Stale;);
+    let setdirtyclean = quote!(dirty.state[#index] = DirtyEnum::Clean);
+    let setdirtystale = quote!(dirty.state[#index] = DirtyEnum::Stale);
 
     let children = children.map(|x| quote!(dirty.state[#x] = DirtyEnum::NeedCompute;));
 
@@ -127,8 +127,8 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
     let state_names = countrange.clone().map(|i| format_ident!("value{}", i));
 
     let state_struct = {
-        let state_values = std::iter::zip(state_types, state_names)
-            .map(|(kind, name)| quote!(#name : #kind));
+        let state_values =
+            std::iter::zip(state_types, state_names).map(|(kind, name)| quote!(#name : #kind));
         quote!(
             #[derive(Default,Copy,Clone)]
             pub struct #statename {
@@ -159,7 +159,7 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
                 pub fn get(&self, index: usize) -> DirtyEnum {
                     self.state[index]
                 }
-                pub fn reset(&mut self, index: usize) {
+                pub fn set_needs_compute(&mut self, index: usize) {
                     self.state[index] = DirtyEnum::NeedCompute;
                 }
             }
@@ -200,19 +200,47 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
         vec![1].iter(),
     );
 
+    let operations = operations.collect::<Vec<_>>();
+
+    const CHUNKSIZE: usize = 200;
+    let chunks = operations.chunks(CHUNKSIZE);
+
+    fn make_chunk_name(fnname: &PMIdent, i: usize) -> PMIdent {
+        format_ident!("{}_chunk{}", fnname, i)
+    }
+
+    let chunk_funcs = chunks.clone().enumerate().map(|(i, chunk)| {
+        let chunkname = make_chunk_name(&fnname, i);
+        //let chunk = chunk.iter().map(|x| quote!(#x));
+        quote!(
+            #[inline(never)]
+            fn #chunkname(state: &mut #statename, dirty: &mut #dirtyname) -> usize {
+                let mut compute_count : usize = 0;
+                #(#chunk)*
+                compute_count
+            }
+        )
+    });
+    let call_chunks = chunks.enumerate().map(|(i, _)| {
+        let chunkname = make_chunk_name(&fnname, i);
+        quote!(compute_count += #chunkname(state, dirty);)
+    });
+
     let out = quote! {
       #state_struct
       #dirty_struct
 
+        #[inline(never)]
       pub fn #fnname(state: &mut #statename, dirty: &mut #dirtyname) -> usize {
         let mut compute_count : usize = 0;
         #firstcall
-        #(#operations)*
+        #(#call_chunks)*
         compute_count
       }
+      #(#chunk_funcs)*
     };
 
-    eprintln!("{}", out);
+    // eprintln!("{}", out);
 
     out.into()
 }

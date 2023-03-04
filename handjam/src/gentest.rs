@@ -21,9 +21,9 @@ fn zero() -> u32 {
     0
 }
 
-pub const CHAIN_LENGTH: usize = 10;
+pub const CHAIN_LENGTH: usize = 2000;
 
-ive_chain!(10);
+ive_chain!(2000);
 
 #[cfg(test)]
 mod tests {
