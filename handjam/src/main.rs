@@ -71,17 +71,12 @@ fn manual_option_persist_with_if_let(state: &mut ManualOptionalStore) -> String 
     string_slice_value.into()
 }
 
-#[derive(PartialEq)]
+#[derive(Default,PartialEq)]
 enum DirtyEnum {
+    #[default]
     NeedCompute,
     Stale,
     Clean,
-}
-
-impl Default for DirtyEnum {
-    fn default() -> Self {
-        DirtyEnum::NeedCompute
-    }
 }
 
 #[derive(Default)]
@@ -236,7 +231,7 @@ fn tree_with_optional_node(state: &mut TreeStateWithOptional, dirty: &mut TreeDi
 }
 
 struct TreeStateWithResult {
-    one: Option<Result<i32, ()>>,
+    one: Option<Result<i32, NullError>>,
     two: Option<i32>,
     add: Option<i32>,
 }

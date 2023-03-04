@@ -27,7 +27,10 @@ pub fn two_optional() -> Option<i32> {
     Some(2)
 }
 
-pub fn one_result() -> Result<i32, ()> {
+#[derive(Copy,Clone)]
+pub struct NullError;
+
+pub fn one_result() -> Result<i32, NullError> {
     Ok(1)
 }
 
@@ -62,7 +65,7 @@ pub fn int_to_string(value: i32) -> String {
 }
 
 pub fn string_slice(string: &str) -> &str {
-    &string[..]
+    &string[1..]
 }
 
 pub fn print(string: &str) {

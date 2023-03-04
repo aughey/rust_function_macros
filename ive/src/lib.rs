@@ -230,7 +230,6 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
     let straightline_fn = {
         let sl_name = format_ident!("{}_straightline", fnname);
         let operations = countrange
-        .clone()
         .skip(1) // Skip the first one
         .map(|i| {
             let input = format_ident!("value{}", i - 1);

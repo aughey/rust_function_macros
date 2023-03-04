@@ -1,16 +1,11 @@
 use ive::ive_chain;
 
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Default,Copy,Clone,PartialEq)]
 pub enum DirtyEnum {
+    #[default]
     NeedCompute,
     Stale,
     Clean,
-}
-
-impl Default for DirtyEnum {
-    fn default() -> Self {
-        DirtyEnum::NeedCompute
-    }
 }
 
 fn add_one(a: u32) -> u32 {

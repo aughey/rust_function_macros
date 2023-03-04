@@ -112,7 +112,7 @@ impl LinearExec {
         Self {
             store: DynStorage::new(size),
             dirty: DynDirty::new(size),
-            nodes: nodes,
+            nodes,
             input_indices: vec![Vec::new(); size],
             children: vec![Vec::new(); size]
         }
@@ -120,7 +120,7 @@ impl LinearExec {
     pub fn value_any(&self, index: usize) -> Option<&BoxedAny> {
         self.store.values.get(index)?.as_ref()
     }
-    pub fn value<'a,T>(&'a self, index: usize) -> Option<&'a T> 
+    pub fn value<T>(& self, index: usize) -> Option<& T> 
         where T: Copy + 'static {
         let any = self.value_any(index)?;
         any.downcast_ref::<T>()
