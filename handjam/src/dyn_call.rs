@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ive::make_dynamicable;
 
 #[derive(Copy,Clone,PartialEq)]
@@ -13,8 +15,46 @@ pub fn one() -> i32 {
 }
 
 #[make_dynamicable()]
+pub fn two() -> i32 {
+    2
+}
+
+#[make_dynamicable()]
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[make_dynamicable()]
 pub fn add_one(a: i32) -> i32 {
     a + 1
+}
+
+#[derive(Clone)]
+struct CustomType {
+    value: i32,
+    mutable_value: Rc<std::cell::RefCell<i32>>
+}
+
+#[make_dynamicable()]
+fn create_custom_type() -> CustomType {
+    CustomType { value: 1, mutable_value: Rc::new(std::cell::RefCell::new(1)) }
+}
+
+#[make_dynamicable()]
+fn increment_custom_type(custom_type: &CustomType) -> CustomType {
+    CustomType { value: custom_type.value + 1, mutable_value: custom_type.mutable_value.clone() }
+}
+
+#[make_dynamicable()]
+fn increment_mutable(custom_type: &CustomType) -> CustomType {
+    let mut value = custom_type.mutable_value.borrow_mut();
+    *value += 1;
+    custom_type.clone()
+}
+
+#[make_dynamicable()]
+fn strip_custom_type(custom_type: &CustomType) -> i32 {
+    custom_type.value
 }
 
 pub trait ValidInputs {
@@ -85,7 +125,7 @@ impl DynDirty {
 
 type ChildrenIndices = Vec<usize>;
 type InputIndices = Vec<usize>;
-pub struct LinearExec {
+pub struct DynLinearExec {
     store: DynStorage,
     dirty: DynDirty,
     nodes: Vec<Box<dyn DynCall>>,
@@ -93,7 +133,7 @@ pub struct LinearExec {
     children: Vec<ChildrenIndices>,
 }
 
-impl LinearExec {
+impl DynLinearExec {
     fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
         let nodes = nodes.collect::<Vec<_>>();
         let size = nodes.len();
@@ -118,9 +158,9 @@ impl LinearExec {
     }
     pub fn value<T>(& self, index: usize) -> Option<& T> 
         where T: Copy + 'static {
-        let any = self.value_any(index)?;
-        // We use expect here because this is a critical error that needs to properly panic
-        Some(any.value::<T>())
+       let v = self.store.values.get(index)?;
+       let v = v.as_ref()?;
+         Some(v.value())
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -179,7 +219,7 @@ pub fn box_dyn_call<T: DynCall + 'static>(t: T) -> Box<dyn DynCall> {
     Box::new(t)
 }
 
-pub fn generate_linear_exec(count: usize) -> LinearExec {
+pub fn generate_linear_exec(count: usize) -> DynLinearExec {
     let nodes = (0..count-1).map(|_| {
         Box::new(AddOneDynCall{}) as Box<dyn DynCall>
     });
@@ -188,7 +228,7 @@ pub fn generate_linear_exec(count: usize) -> LinearExec {
 
     let concat = firstnode.into_iter().chain(nodes);
 
-    LinearExec::new_linear_chain(concat)
+    DynLinearExec::new_linear_chain(concat)
 }
 
 #[cfg(test)]
@@ -252,7 +292,7 @@ mod tests {
 
         let nodes : Vec<Box<dyn DynCall>>= vec![Box::new(one_compute), Box::new(addone_compute)];
 
-        let mut exec = LinearExec::new_linear_chain(nodes.into_iter());
+        let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
         
         let computed = exec.run();
 
@@ -299,7 +339,7 @@ mod tests {
             input.to_owned() + input
         }
 
-        let mut exec = LinearExec::new_linear_chain(vec![
+        let mut exec = DynLinearExec::new_linear_chain(vec![
             box_dyn_call(JohnAugheyDynCall{}),
             box_dyn_call(StringDoubleDynCall{}),
         ].into_iter());
@@ -308,5 +348,43 @@ mod tests {
         assert_eq!(exec.value_any(0).unwrap().value::<String>(),&"John Aughey");
         assert_eq!(exec.value_any(1).unwrap().value::<String>(),&"John AugheyJohn Aughey");
 
+    }
+
+    #[test]
+    fn test_custom_type() {
+      
+        let mut exec = DynLinearExec::new_linear_chain(vec![
+            box_dyn_call(CreateCustomTypeDynCall{}),
+            box_dyn_call(IncrementCustomTypeDynCall{}),
+            box_dyn_call(IncrementMutableDynCall{}),
+            box_dyn_call(StripCustomTypeDynCall{}),
+        ].into_iter());
+        let count = exec.run();
+        assert_eq!(count,4);
+        assert_eq!(exec.value::<i32>(count-1),Some(&2));
+    }
+
+    #[test]
+    fn test_hand_made_graph() {
+      
+        let mut exec = DynLinearExec::new(vec![
+            box_dyn_call(OneDynCall{}),
+            box_dyn_call(TwoDynCall{}),
+            box_dyn_call(AddDynCall{})
+        ].into_iter());
+
+        // Wire the inputs manuall
+        exec.inputs(0, vec![]);
+        exec.inputs(1, vec![]);
+        exec.inputs(2, vec![0,1]);
+
+        // Wire the children manually
+        exec.children(0, vec![2]);
+        exec.children(1, vec![2]);
+        exec.children(2, vec![]);
+
+        let count = exec.run();
+        assert_eq!(count,3);
+        assert_eq!(exec.value::<i32>(count-1),Some(&3));
     }
 }

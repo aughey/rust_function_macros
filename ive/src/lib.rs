@@ -386,6 +386,9 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
             syn::FnArg::Typed(ty) => {
                match &*ty.ty {
                      syn::Type::Reference(ty) => {
+                        if ty.mutability.is_some() {
+                            panic!("Cannot have a mutable reference as an input");
+                        }
                         let ty = &*ty.elem;
                         InputType{ ty: quote!{#ty}, is_ref: true }
                      }
