@@ -420,11 +420,17 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     let wrapper = quote!{
         struct #dyncall_name;
         impl DynCall for #dyncall_name {
-            fn call(&self, inputs: &[&BoxedAny]) -> BoxedAny {
-                BoxedAny::new(#fnname(#(#input_pull),*))
+            fn call(&self, inputs: &AnyInputs, outputs: &AnyOutputs) -> DynCallResult {
+                assert_eq!(inputs.len(), #input_len);
+                assert_eq!(outputs.len(), 1);
+                let output = BoxedAny::new(#fnname(#(#input_pull),*));
+                outputs[0] = Some(output);
             }
             fn input_len(&self) -> usize {
                 #input_len
+            }
+            fn output_len(&self) -> usize {
+                1
             }
         }
     };

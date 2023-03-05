@@ -82,9 +82,12 @@ impl BoxedAny {
 }
 
 pub type AnyInputs<'a> = [&'a BoxedAny];
+pub type AnyOutputs<'a> = [&'a mut Option<BoxedAny>];
+type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
-    fn call(&self, inputs: &AnyInputs) -> BoxedAny;
+    fn call(&self, inputs: &AnyInputs, outputs: &AnyOutputs) -> DynCallResult;
     fn input_len(&self) -> usize;
+    fn output_len(&self) -> usize;
 }
 
 #[make_dynamicable()]
@@ -192,7 +195,9 @@ impl DynLinearExec {
 
                 if inputs.len() == inputlen {
                     dirty.state[run_index] = DirtyEnum::Clean;
-                    store.values[run_index] = Some(node.call(&inputs));
+                    let output = &mut store.values[run_index];
+                    let outputs : vec![output];
+                    _ = Some(node.call(&inputs, outputs));
                     compute_count += 1;
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
