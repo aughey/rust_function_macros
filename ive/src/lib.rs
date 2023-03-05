@@ -1,3 +1,4 @@
+use convert_case::{Casing, Case};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, ItemFn, Type};
@@ -104,6 +105,7 @@ where
         }
     )
 }
+
 
 #[proc_macro]
 pub fn ive_chain(input: TokenStream) -> TokenStream {
@@ -351,3 +353,81 @@ pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     .into()
 }
 
+// struct JohnAugheyDyn;
+// impl DynCall for JohnAugheyDyn {
+//     fn call(&self, _inputs: &[&BoxedAny]) -> BoxedAny {
+//         BoxedAny::new(john_aughey())
+//     }
+//     fn input_len(&self) -> usize {
+//         0
+//     }
+// }
+
+#[proc_macro_attribute]
+pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStream {
+    let input : ItemFn = syn::parse(stream).unwrap();
+
+    let ItemFn { attrs, vis, sig, block } = input;
+
+    // Pull apart sig
+    let fnname = &sig.ident;
+    let inputs = &sig.inputs;
+    let input_len = inputs.len();
+
+    let dyncall_name = format_ident!("{}DynCall", fnname.to_string().to_case(Case::Pascal));
+
+    struct InputType {
+        ty: proc_macro2::TokenStream,
+        is_ref: bool
+    }
+
+    let input_types = inputs.iter().map(|arg| {
+        let ty = match arg {
+            syn::FnArg::Typed(ty) => {
+               match &*ty.ty {
+                     syn::Type::Reference(ty) => {
+                        let ty = &*ty.elem;
+                        InputType{ ty: quote!{#ty}, is_ref: true }
+                     }
+                     syn::Type::Path(ty) => {
+                        let ty = &ty.path;
+                        InputType{ ty: quote!{#ty}, is_ref: false }
+                     }
+                     _ => panic!("Expected typed argument"),
+               }
+            },
+            _ => panic!("Expected typed argument"),
+        };
+       ty
+    });
+
+    let input_pull = input_types.enumerate().map(|(i, ty)| {
+        let kind = ty.ty;
+        if ty.is_ref {
+            quote! {
+                inputs[#i].value::<#kind>()
+            }
+        } else {
+            quote! {
+                *inputs[#i].value::<#kind>()
+            }
+        }
+    });
+
+    let wrapper = quote!{
+        struct #dyncall_name;
+        impl DynCall for #dyncall_name {
+            fn call(&self, inputs: &[&BoxedAny]) -> BoxedAny {
+                BoxedAny::new(#fnname(#(#input_pull),*))
+            }
+            fn input_len(&self) -> usize {
+                #input_len
+            }
+        }
+    };
+
+    quote! {
+        #(#attrs)* #vis #sig #block
+        #wrapper
+    }.into()
+}

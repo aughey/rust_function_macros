@@ -1,3 +1,4 @@
+use ive::make_dynamicable;
 
 #[derive(Copy,Clone,PartialEq)]
 pub enum DirtyEnum {
@@ -6,10 +7,12 @@ pub enum DirtyEnum {
     Clean,
 }
 
+#[make_dynamicable()]
 pub fn one() -> i32 {
     1
 }
 
+#[make_dynamicable()]
 pub fn add_one(a: i32) -> i32 {
     a + 1
 }
@@ -44,43 +47,9 @@ pub trait DynCall {
     fn input_len(&self) -> usize;
 }
 
+#[make_dynamicable()]
 fn zero() -> i32 {
     0
-}
-
-struct ZeroAsDynCall;
-impl DynCall for ZeroAsDynCall {
-    fn call(&self, _inputs: &AnyInputs) -> BoxedAny {
-        BoxedAny::new(zero())
-    }
-    fn input_len(&self) -> usize {
-        0
-    }
-}
-
-struct OneAsDynCall {
-
-}
-
-impl DynCall for OneAsDynCall {
-    fn call(&self, _inputs: &AnyInputs) -> BoxedAny {
-        BoxedAny::new(one())
-    }
-    fn input_len(&self) -> usize {
-        0
-    }
-}
-
-struct AddOneAsDynCall;
-
-impl DynCall for AddOneAsDynCall {
-    fn call(&self, inputs: &AnyInputs) -> BoxedAny {
-        let a = inputs[0].value::<i32>();
-        BoxedAny::new(add_one(*a))
-    }
-    fn input_len(&self) -> usize {
-        1
-    }
 }
 
 pub struct DynStorage {
@@ -206,12 +175,16 @@ impl LinearExec {
     }
 }
 
+pub fn box_dyn_call<T: DynCall + 'static>(t: T) -> Box<dyn DynCall> {
+    Box::new(t)
+}
+
 pub fn generate_linear_exec(count: usize) -> LinearExec {
     let nodes = (0..count-1).map(|_| {
-        Box::new(AddOneAsDynCall{}) as Box<dyn DynCall>
+        Box::new(AddOneDynCall{}) as Box<dyn DynCall>
     });
 
-    let firstnode = vec![Box::new(ZeroAsDynCall{}) as Box<dyn DynCall>];
+    let firstnode = vec![Box::new(ZeroDynCall{}) as Box<dyn DynCall>];
 
     let concat = firstnode.into_iter().chain(nodes);
 
@@ -220,12 +193,16 @@ pub fn generate_linear_exec(count: usize) -> LinearExec {
 
 #[cfg(test)]
 mod tests {
+
+
+    use ive::make_dynamicable;
+
     use super::*;
   
     #[test]
     fn test_one() {
-        let one_compute = OneAsDynCall {};
-        let addone_compute = AddOneAsDynCall {};
+        let one_compute = OneDynCall {};
+        let addone_compute = AddOneDynCall {};
 
         let mut store = DynStorage {
             values: vec![None, None]
@@ -270,8 +247,8 @@ mod tests {
 
     #[test]
     fn test_loop() {
-        let one_compute = OneAsDynCall {};
-        let addone_compute = AddOneAsDynCall {};
+        let one_compute = OneDynCall {};
+        let addone_compute = AddOneDynCall {};
 
         let nodes : Vec<Box<dyn DynCall>>= vec![Box::new(one_compute), Box::new(addone_compute)];
 
@@ -312,45 +289,24 @@ mod tests {
     #[test]
     fn test_dyn_string_ops() {
 
+        #[make_dynamicable()]
         fn john_aughey() -> String{
             "John Aughey".to_string()
         }
 
+        #[make_dynamicable()]
         fn string_double(input: &String) -> String {
             input.to_owned() + input
         }
 
-        struct JohnAugheyDyn;
-        impl DynCall for JohnAugheyDyn {
-            fn call(&self, _inputs: &[&BoxedAny]) -> BoxedAny {
-                BoxedAny::new(john_aughey())
-            }
-            fn input_len(&self) -> usize {
-                0
-            }
-        }
-
-        struct StringDoubleDyn;
-        impl DynCall for StringDoubleDyn {
-            fn call(&self, inputs: &[&BoxedAny]) -> BoxedAny {
-                BoxedAny::new(string_double(inputs[0].value::<String>()))
-            }
-            fn input_len(&self) -> usize {
-                0
-            }
-        }
-        
-        
-
-        const CHAIN_LENGTH: usize = 10;
-        let mut exec = generate_linear_exec(CHAIN_LENGTH);
+        let mut exec = LinearExec::new_linear_chain(vec![
+            box_dyn_call(JohnAugheyDynCall{}),
+            box_dyn_call(StringDoubleDynCall{}),
+        ].into_iter());
         let count = exec.run();
-        assert_eq!(count,CHAIN_LENGTH);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
+        assert_eq!(count,2);
+        assert_eq!(exec.value_any(0).unwrap().value::<String>(),&"John Aughey");
+        assert_eq!(exec.value_any(1).unwrap().value::<String>(),&"John AugheyJohn Aughey");
 
-        exec.set_runnable(0);
-        let count = exec.run();
-        assert_eq!(count,CHAIN_LENGTH);
     }
 }

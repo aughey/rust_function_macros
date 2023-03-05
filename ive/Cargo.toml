@@ -12,3 +12,4 @@ syn = { version = "1", features = ["full"] }
 quote = "1"
 itertools = "0.10.5"
 proc-macro2 = "1"
+convert_case = "0.6.0"
