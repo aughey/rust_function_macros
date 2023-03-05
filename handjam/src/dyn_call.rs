@@ -14,6 +14,8 @@ pub fn one() -> i32 {
     1
 }
 
+
+
 #[make_dynamicable()]
 pub fn two() -> i32 {
     2
@@ -28,6 +30,22 @@ pub fn add(a: i32, b: i32) -> i32 {
 pub fn add_one(a: i32) -> i32 {
     a + 1
 }
+// struct AddOneDynCall;
+// impl DynCall for AddOneDynCall {
+//     fn call(&self, inputs: &AnyInputs, outputs: &AnyOutputs) -> DynCallResult {
+//         assert_eq!(inputs.len(), 1);
+//         assert_eq!(outputs.len(), 1);
+//         let output = BoxedAny::new(add_one(*inputs[0].value()) );
+//         *outputs[0] = Some(output);
+//         Ok(())
+//     }
+//     fn input_len(&self) -> usize {
+//         1
+//     }
+//     fn output_len(&self) -> usize {
+//         1
+//     }
+// }
 
 #[derive(Clone)]
 struct CustomType {
@@ -81,11 +99,12 @@ impl BoxedAny {
     }
 }
 
+pub type OptionalValue = Option<BoxedAny>;
 pub type AnyInputs<'a> = [&'a BoxedAny];
-pub type AnyOutputs<'a> = [&'a mut Option<BoxedAny>];
+pub type AnyOutputs<'a> = [OptionalValue];
 type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
-    fn call(&self, inputs: &AnyInputs, outputs: &AnyOutputs) -> DynCallResult;
+    fn call(&self, inputs: &AnyInputs, outputs: &mut AnyOutputs) -> DynCallResult;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
 }
@@ -195,9 +214,10 @@ impl DynLinearExec {
 
                 if inputs.len() == inputlen {
                     dirty.state[run_index] = DirtyEnum::Clean;
-                    let output = &mut store.values[run_index];
-                    let outputs : vec![output];
+                    let mut outputs = vec![OptionalValue::None];
+                    let outputs = outputs.as_mut_slice();
                     _ = Some(node.call(&inputs, outputs));
+                    store.values[run_index] = outputs[0].take();
                     compute_count += 1;
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
@@ -244,51 +264,7 @@ mod tests {
 
     use super::*;
   
-    #[test]
-    fn test_one() {
-        let one_compute = OneDynCall {};
-        let addone_compute = AddOneDynCall {};
-
-        let mut store = DynStorage {
-            values: vec![None, None]
-        };
-
-        let mut dirty = DynDirty {
-            state: vec![DirtyEnum::NeedCompute, DirtyEnum::NeedCompute]
-        };
-
-        if dirty.state[0] == DirtyEnum::NeedCompute {
-            let inputs = Vec::<&BoxedAny>::new();
-            if inputs.len() == 0 {
-                dirty.state[0] = DirtyEnum::Clean;
-                store.values[0] = Some(one_compute.call(&inputs));
-            } else {
-                dirty.state[0] = DirtyEnum::Stale;
-            }
-        }
-
-        if dirty.state[1] == DirtyEnum::NeedCompute {
-            dirty.state[1] = DirtyEnum::Clean;
-            let mut inputs = Vec::<&BoxedAny>::new();
-            if let Some(value) = store.values[0].as_ref() {
-                inputs.push(value);
-            }
-            if inputs.len() == 1 {
-                dirty.state[0] = DirtyEnum::Clean;
-                store.values[1] = Some(addone_compute.call(&inputs));
-            } else {
-                dirty.state[0] = DirtyEnum::Stale;
-            }
-        }
-
-        let value1 = store.values[1].as_ref();
-        if let Some(value1) = value1 {
-            let value1_box = value1.value::<i32>();
-            assert_eq!(*value1_box, 2);
-        } else {
-            assert!(false);
-        }
-    }
+  
 
     #[test]
     fn test_loop() {

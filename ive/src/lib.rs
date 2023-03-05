@@ -382,7 +382,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     }
 
     let input_types = inputs.iter().map(|arg| {
-        let ty = match arg {
+        match arg {
             syn::FnArg::Typed(ty) => {
                match &*ty.ty {
                      syn::Type::Reference(ty) => {
@@ -400,8 +400,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                }
             },
             _ => panic!("Expected typed argument"),
-        };
-       ty
+        }
     });
 
     let input_pull = input_types.enumerate().map(|(i, ty)| {
@@ -420,11 +419,12 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     let wrapper = quote!{
         struct #dyncall_name;
         impl DynCall for #dyncall_name {
-            fn call(&self, inputs: &AnyInputs, outputs: &AnyOutputs) -> DynCallResult {
+            fn call(&self, inputs: &AnyInputs, outputs: &mut AnyOutputs) -> DynCallResult {
                 assert_eq!(inputs.len(), #input_len);
                 assert_eq!(outputs.len(), 1);
                 let output = BoxedAny::new(#fnname(#(#input_pull),*));
                 outputs[0] = Some(output);
+                Ok(())
             }
             fn input_len(&self) -> usize {
                 #input_len
