@@ -119,13 +119,8 @@ fn zero() -> i32 {
 
         assert_eq!(computed, 2);
 
-        let value1 = exec.value_any(1);
-        if let Some(value1) = value1 {
-            let value1_box = value1.value::<i32>().unwrap();
-            assert_eq!(*value1_box, 2);
-        } else {
-            assert!(false);
-        }
+        let value1 = exec.value::<i32>(1).unwrap();
+            assert_eq!(*value1, 2);
 
         exec.set_runnable(0);
         let computed = exec.run().expect("Failed to run");

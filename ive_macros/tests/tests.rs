@@ -1,4 +1,4 @@
-use ive::node;
+use ive_macros::node;
 use quote::{quote, ToTokens};
 
 #[derive(Debug)]

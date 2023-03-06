@@ -9,8 +9,10 @@ pub struct PortBuilder<NODETYPE, PORTTYPE> {
     port: PORTTYPE,
 }
 impl<NODETYPE, PORTTYPE> PortBuilder<NODETYPE, PORTTYPE> {
-    pub fn connect_to(&mut self, other: InPort<PORTTYPE>) -> &mut Self 
-    where PORTTYPE : Clone {
+    pub fn connect_to(&mut self, other: InPort<PORTTYPE>) -> &mut Self
+    where
+        PORTTYPE: Clone,
+    {
         self.dag
             .borrow_mut()
             .add_edge(self.index, other.index, (self.port.clone(), other.port));
@@ -33,7 +35,7 @@ impl<NODETYPE, PORTTYPE> NodeBuilder<NODETYPE, PORTTYPE> {
             port,
         }
     }
-    pub fn out_port(&mut self, port: PORTTYPE) -> PortBuilder<NODETYPE,PORTTYPE> {
+    pub fn out_port(&mut self, port: PORTTYPE) -> PortBuilder<NODETYPE, PORTTYPE> {
         PortBuilder {
             dag: self.dag.clone(),
             index: self.index,
@@ -44,6 +46,11 @@ impl<NODETYPE, PORTTYPE> NodeBuilder<NODETYPE, PORTTYPE> {
 
 pub struct GraphBuilder<NODETYPE, PORTTYPE> {
     dag: Rc<RefCell<Graph<NODETYPE, (PORTTYPE, PORTTYPE)>>>,
+}
+impl<NODETYPE, PORTTYPE> Default for GraphBuilder<NODETYPE, PORTTYPE> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl<NODETYPE, PORTTYPE> GraphBuilder<NODETYPE, PORTTYPE> {
     pub fn new() -> Self {
@@ -167,7 +174,7 @@ mod tests {
     #[test]
     fn test_more_complex_buidler() {
         let mut builder = GraphBuilder::<&str, &str>::new();
-        
+
         let mut a = builder.add_node("A");
         let mut b = builder.add_node("B");
         let mut c = builder.add_node("C");
@@ -196,7 +203,6 @@ mod tests {
 
         let mut a = builder.add_node("A");
         let mut b = builder.add_node("B");
-       
 
         a.out_port("first").connect_to(b.in_port("inport"));
         b.out_port("second").connect_to(a.in_port("inport"));
@@ -205,6 +211,5 @@ mod tests {
         let sorted = toposort(&graph, None);
 
         assert!(sorted.is_err());
-
     }
 }

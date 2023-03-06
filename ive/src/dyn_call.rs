@@ -104,18 +104,18 @@ pub struct DynLinearExec {
 // Create a DynExecError that is an std::error::Error
 #[derive(Debug, PartialEq)]
 enum DynExecError {
-    DevBadDirtyIndex,
-    DevInputOutOfRange,
-    DevFetchNone,
-    DevValueIsNone,
+    BadDirtyIndex,
+    InputOutOfRange,
+    FetchNone,
+    ValueIsNone,
 }
 impl std::fmt::Display for DynExecError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            DynExecError::DevBadDirtyIndex => write!(f, "Dev Error: Bad dirty index"),
-            DynExecError::DevInputOutOfRange => write!(f, "Dev Error: Input out of range"),
-            DynExecError::DevFetchNone => write!(f, "Dev Error: Fetch None"),
-            DynExecError::DevValueIsNone => write!(f, "Dev Error: Value is None"),
+            DynExecError::BadDirtyIndex => write!(f, "Dev Error: Bad dirty index"),
+            DynExecError::InputOutOfRange => write!(f, "Dev Error: Input out of range"),
+            DynExecError::FetchNone => write!(f, "Dev Error: Fetch None"),
+            DynExecError::ValueIsNone => write!(f, "Dev Error: Value is None"),
         }
     }
 }
@@ -147,12 +147,15 @@ impl<'a> InputGetter<'a> {
     {
         self.values[self.indices[index]]
             .as_ref()
-            .ok_or(DynExecError::DevFetchNone)?
+            .ok_or(DynExecError::FetchNone)?
             //.unwrap()
             .value::<T>()
     }
     pub fn len(&self) -> usize {
         self.indices.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 pub struct OutputSetter<'a> {
@@ -182,6 +185,9 @@ impl<'a> OutputSetter<'a> {
     }
     pub fn len(&self) -> usize {
         self.values.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -257,9 +263,9 @@ impl DynLinearExec {
             .store
             .values
             .get(index)
-            .ok_or_else(|| DynExecError::DevInputOutOfRange)?;
+            .ok_or(DynExecError::InputOutOfRange)?;
         v.as_ref()
-            .ok_or_else(|| DynExecError::DevValueIsNone)?
+            .ok_or(DynExecError::ValueIsNone)?
             .value::<T>()
     }
 
@@ -282,7 +288,7 @@ impl DynLinearExec {
             let runstate = dirty
                 .state
                 .get_mut(run_index)
-                .ok_or(DynExecError::DevBadDirtyIndex)?;
+                .ok_or(DynExecError::BadDirtyIndex)?;
 
             // As much as I lothe nested indentation, I want to keep the same format as the "algorithm"
             if *runstate == DirtyEnum::NeedCompute {
@@ -309,7 +315,7 @@ impl DynLinearExec {
                 {
                     let max_input_index = inputs.len();
                     if node.input_indices.iter().any(|i| *i >= max_input_index) {
-                        return Err(DynExecError::DevInputOutOfRange.into());
+                        return Err(DynExecError::InputOutOfRange.into());
                     }
                 }
 
@@ -335,7 +341,7 @@ impl DynLinearExec {
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
                     // This slick one liner sets all the outputs to None
-                    outputs.into_iter().for_each(|o| *o = None);
+                    outputs.iter_mut().for_each(|o| *o = None);
                 }
                 // Run our children
                 for child in node.children.iter() {
