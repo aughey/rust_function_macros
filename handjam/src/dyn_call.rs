@@ -268,6 +268,18 @@ impl<'a> OutputSetter<'a> {
     }
 }
 
+pub trait HasDynCall {
+    fn dyn_call(&self) -> Box<dyn DynCall>;
+}
+pub trait HasInputIndices {
+    type IntoIter: Iterator<Item = usize>;
+    fn input_indices(&self) -> Self::IntoIter;
+}
+pub trait HasChildrenIndices {
+    type IntoIter: Iterator<Item = usize>;
+    fn children_indices(&self) -> Self::IntoIter;
+}
+
 impl DynLinearExec {
     fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
         let nodes = nodes
@@ -283,6 +295,25 @@ impl DynLinearExec {
         Self {
             store: DynStorage::new(storesize),
             dirty: DynDirty::new(size),
+            nodes,
+        }
+    }
+    pub fn build_execution_chain<DESC,DESCITEM>(desc : DESC) -> DynLinearExec 
+    where
+    DESC: Iterator<Item = DESCITEM>,
+    DESCITEM : HasDynCall + HasInputIndices + HasChildrenIndices
+    {
+        let nodes = desc.map(|n| {
+            ExecNode {
+                call: n.dyn_call(),
+                input_indices: n.input_indices().collect(),
+                children: n.children_indices().collect(),
+            }
+        }).collect::<Vec<_>>();
+        let storelen = nodes.iter().map(|n| n.num_outputs()).sum();
+        Self {
+            store: DynStorage::new(storelen),
+            dirty: DynDirty::new(nodes.len()),
             nodes,
         }
     }
