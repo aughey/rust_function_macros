@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ive::make_dynamicable;
 
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum DirtyEnum {
     NeedCompute,
     Stale,
@@ -13,8 +13,6 @@ pub enum DirtyEnum {
 pub fn one() -> i32 {
     1
 }
-
-
 
 #[make_dynamicable()]
 pub fn two() -> i32 {
@@ -51,17 +49,23 @@ pub fn add_one(a: i32) -> i32 {
 #[derive(Clone)]
 struct CustomType {
     value: i32,
-    mutable_value: Rc<std::cell::RefCell<i32>>
+    mutable_value: Rc<std::cell::RefCell<i32>>,
 }
 
 #[make_dynamicable()]
 fn create_custom_type() -> CustomType {
-    CustomType { value: 1, mutable_value: Rc::new(std::cell::RefCell::new(1)) }
+    CustomType {
+        value: 1,
+        mutable_value: Rc::new(std::cell::RefCell::new(1)),
+    }
 }
 
 #[make_dynamicable()]
 fn increment_custom_type(custom_type: &CustomType) -> CustomType {
-    CustomType { value: custom_type.value + 1, mutable_value: custom_type.mutable_value.clone() }
+    CustomType {
+        value: custom_type.value + 1,
+        mutable_value: custom_type.mutable_value.clone(),
+    }
 }
 
 #[make_dynamicable()]
@@ -82,21 +86,25 @@ pub trait ValidInputs {
 
 //pub type BoxedAny = Box<dyn std::any::Any>;
 pub struct BoxedAny {
-    any: Box<dyn std::any::Any>
+    any: Box<dyn std::any::Any>,
 }
 impl BoxedAny {
-    fn new<T>(value: T) -> BoxedAny 
-    where T: 'static + std::any::Any
+    fn new<T>(value: T) -> BoxedAny
+    where
+        T: 'static + std::any::Any,
     {
         Self {
-            any: Box::new(value)
+            any: Box::new(value),
         }
     }
 
     pub fn value<T>(&self) -> &T
-    where T: 'static + std::any::Any
-     {
-        self.any.downcast_ref::<T>().expect("Unable to downcast any to given type")
+    where
+        T: 'static + std::any::Any,
+    {
+        self.any
+            .downcast_ref::<T>()
+            .expect("Unable to downcast any to given type")
     }
 }
 
@@ -116,12 +124,12 @@ fn zero() -> i32 {
 }
 
 pub struct DynStorage {
-    values: Vec<Option<BoxedAny>>
+    values: Vec<Option<BoxedAny>>,
 }
 impl DynStorage {
     fn new(size: usize) -> Self {
         let mut s = DynStorage {
-            values: Vec::with_capacity(size)
+            values: Vec::with_capacity(size),
         };
         for _ in 0..size {
             s.values.push(None);
@@ -131,13 +139,13 @@ impl DynStorage {
 }
 
 pub struct DynDirty {
-    state: Vec<DirtyEnum>
+    state: Vec<DirtyEnum>,
 }
 
 impl DynDirty {
     fn new(size: usize) -> Self {
         let mut s = DynDirty {
-            state: Vec::with_capacity(size)
+            state: Vec::with_capacity(size),
         };
         for _ in 0..size {
             s.state.push(DirtyEnum::NeedCompute);
@@ -157,6 +165,9 @@ impl ExecNode {
     fn num_inputs(&self) -> usize {
         self.input_indices.len()
     }
+    fn num_outputs(&self) -> usize {
+        self.call.output_len()
+    }
 }
 pub struct DynLinearExec {
     store: DynStorage,
@@ -166,35 +177,39 @@ pub struct DynLinearExec {
 
 impl DynLinearExec {
     fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
-        let nodes = nodes.map(|n| ExecNode {
-            call: n,
-            input_indices: Vec::new(),
-            children: Vec::new()
-        }).collect::<Vec<_>>();
+        let nodes = nodes
+            .map(|n| ExecNode {
+                call: n,
+                input_indices: Vec::new(),
+                children: Vec::new(),
+            })
+            .collect::<Vec<_>>();
 
         let size = nodes.len();
         Self {
             store: DynStorage::new(size),
             dirty: DynDirty::new(size),
-            nodes
+            nodes,
         }
     }
     pub fn new_linear_chain(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
-       let mut exec = Self::new(nodes);
-         for i in 1..exec.nodes.len() {
+        let mut exec = Self::new(nodes);
+        for i in 1..exec.nodes.len() {
             exec.inputs(i, vec![i - 1]);
-            exec.children(i - 1,vec![i]);
-         }
-         exec
+            exec.children(i - 1, vec![i]);
+        }
+        exec
     }
     pub fn value_any(&self, index: usize) -> Option<&BoxedAny> {
         self.store.values.get(index)?.as_ref()
     }
-    pub fn value<T>(& self, index: usize) -> Option<& T> 
-        where T: Copy + 'static {
-       let v = self.store.values.get(index)?;
-       let v = v.as_ref()?;
-         Some(v.value())
+    pub fn value<T>(&self, index: usize) -> Option<&T>
+    where
+        T: Copy + 'static,
+    {
+        let v = self.store.values.get(index)?;
+        let v = v.as_ref()?;
+        Some(v.value())
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -205,46 +220,70 @@ impl DynLinearExec {
     }
     pub fn run(&mut self) -> usize {
         let nodes = &self.nodes;
-        let  dirty = &mut self.dirty;
-        let  store = &mut self.store;
+        let dirty = &mut self.dirty;
+        let store = &mut self.store;
 
-        let mut running_input_index = 0;
         let mut compute_count = 0usize;
-        for (run_index,node) in nodes.iter().enumerate() {
-            
-            if dirty.state[run_index] == DirtyEnum::NeedCompute {
-                let mut inputs = Vec::<&BoxedAny>::new();
-                let inputlen = node.num_inputs();
-                assert_eq!(inputlen, node.input_indices.len(), "Input indices not set correctly");
 
-                for _inputindex in 0..inputlen {
-                    if let Some(value) = store.values[running_input_index].as_ref() {
-                        inputs.push(value);
-                    }
-                    running_input_index += 1;
-                }
+        let mut output_index = 0;
+        for (run_index, node) in nodes.iter().enumerate() {
+            let runstate = &mut dirty.state[run_index];
 
-                if inputs.len() == inputlen {
-                    dirty.state[run_index] = DirtyEnum::Clean;
+            // As much as I lothe nested indentation, I want to keep the same format as the "algorithm"
+            if *runstate == DirtyEnum::NeedCompute {        
+                assert_eq!(
+                    node.num_inputs(),
+                    node.input_indices.len(),
+                    "Input indices not set correctly"
+                );
+
+                // Collect all the inputs into a vector (should keep a vec)
+                // around for good measure to store this, but whatever.
+
+                // This "one liner" will filter out all the None values.
+                // Right after this, if the lengths don't match, we don't
+                // compute (indicating that one of the inputs was None).
+                let inputs = node
+                    .input_indices
+                    .iter()
+                    .filter_map(|i| store.values[*i].as_ref())
+                    .collect::<Vec<_>>();
+
+                if inputs.len() == node.num_inputs() {
+                    *runstate = DirtyEnum::Clean;
 
                     // Right now we have to create a new vector for outputs
                     // This is because we can't pass a mutable slice of Optionals
                     // to the call function because we borrowed immutable above
-                    let mut outputs : Vec::<OptionalValue> = vec![None];
+                    let mut outputs: Vec<OptionalValue> = (0..node.num_outputs())
+                        .into_iter()
+                        .map(|_| None)
+                        .collect::<Vec<_>>();
 
-                    _ = Some(node.call.call(&inputs, &mut outputs));
+                    _ = Some(node.call.call(inputs.as_slice(), outputs.as_mut_slice()));
 
-                    store.values[run_index] = outputs[0].take();
+                    let store_outputs =
+                        &mut store.values[output_index..(output_index + node.num_outputs())];
+                    assert_eq!(outputs.len(), store_outputs.len());
+
+                    // Another slick one liner to set the outputs
+                    std::iter::zip(store_outputs.iter_mut(), outputs.into_iter())
+                        .for_each(|(s, o)| *s = o);
 
                     compute_count += 1;
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
+                    // This slick one liner sets all the outputs to None
+                    store.values[output_index..(output_index + node.num_outputs())]
+                        .iter_mut()
+                        .for_each(|o| *o = None);
                 }
                 // Run our children
                 for child in node.children.iter() {
                     dirty.state[*child] = DirtyEnum::NeedCompute;
                 }
             }
+            output_index += node.num_outputs();
         }
         compute_count
     }
@@ -263,11 +302,9 @@ pub fn box_dyn_call<T: DynCall + 'static>(t: T) -> Box<dyn DynCall> {
 }
 
 pub fn generate_linear_exec(count: usize) -> DynLinearExec {
-    let nodes = (0..count-1).map(|_| {
-        Box::new(AddOneDynCall{}) as Box<dyn DynCall>
-    });
+    let nodes = (0..count - 1).map(|_| Box::new(AddOneDynCall {}) as Box<dyn DynCall>);
 
-    let firstnode = vec![Box::new(ZeroDynCall{}) as Box<dyn DynCall>];
+    let firstnode = vec![Box::new(ZeroDynCall {}) as Box<dyn DynCall>];
 
     let concat = firstnode.into_iter().chain(nodes);
 
@@ -277,26 +314,23 @@ pub fn generate_linear_exec(count: usize) -> DynLinearExec {
 #[cfg(test)]
 mod tests {
 
-
     use ive::make_dynamicable;
 
     use super::*;
-  
-  
 
     #[test]
     fn test_loop() {
         let one_compute = OneDynCall {};
         let addone_compute = AddOneDynCall {};
 
-        let nodes : Vec<Box<dyn DynCall>>= vec![Box::new(one_compute), Box::new(addone_compute)];
+        let nodes: Vec<Box<dyn DynCall>> = vec![Box::new(one_compute), Box::new(addone_compute)];
 
         let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
-        
+
         let computed = exec.run();
 
         assert_eq!(computed, 2);
-    
+
         let value1 = exec.value_any(1);
         if let Some(value1) = value1 {
             let value1_box = value1.value::<i32>();
@@ -308,7 +342,6 @@ mod tests {
         exec.set_runnable(0);
         let computed = exec.run();
         assert_eq!(computed, 2);
-        
     }
 
     #[test]
@@ -316,20 +349,19 @@ mod tests {
         const CHAIN_LENGTH: usize = 10;
         let mut exec = generate_linear_exec(CHAIN_LENGTH);
         let count = exec.run();
-        assert_eq!(count,CHAIN_LENGTH);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
+        assert_eq!(count, CHAIN_LENGTH);
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
+        assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
 
         exec.set_runnable(0);
         let count = exec.run();
-        assert_eq!(count,CHAIN_LENGTH);
+        assert_eq!(count, CHAIN_LENGTH);
     }
 
     #[test]
     fn test_dyn_string_ops() {
-
         #[make_dynamicable()]
-        fn john_aughey() -> String{
+        fn john_aughey() -> String {
             "John Aughey".to_string()
         }
 
@@ -338,44 +370,53 @@ mod tests {
             input.to_owned() + input
         }
 
-        let mut exec = DynLinearExec::new_linear_chain(vec![
-            box_dyn_call(JohnAugheyDynCall{}),
-            box_dyn_call(StringDoubleDynCall{}),
-        ].into_iter());
+        let mut exec = DynLinearExec::new_linear_chain(
+            vec![
+                box_dyn_call(JohnAugheyDynCall {}),
+                box_dyn_call(StringDoubleDynCall {}),
+            ]
+            .into_iter(),
+        );
         let count = exec.run();
-        assert_eq!(count,2);
-        assert_eq!(exec.value_any(0).unwrap().value::<String>(),&"John Aughey");
-        assert_eq!(exec.value_any(1).unwrap().value::<String>(),&"John AugheyJohn Aughey");
-
+        assert_eq!(count, 2);
+        assert_eq!(exec.value_any(0).unwrap().value::<String>(), &"John Aughey");
+        assert_eq!(
+            exec.value_any(1).unwrap().value::<String>(),
+            &"John AugheyJohn Aughey"
+        );
     }
 
     #[test]
     fn test_custom_type() {
-      
-        let mut exec = DynLinearExec::new_linear_chain(vec![
-            box_dyn_call(CreateCustomTypeDynCall{}),
-            box_dyn_call(IncrementCustomTypeDynCall{}),
-            box_dyn_call(IncrementMutableDynCall{}),
-            box_dyn_call(StripCustomTypeDynCall{}),
-        ].into_iter());
+        let mut exec = DynLinearExec::new_linear_chain(
+            vec![
+                box_dyn_call(CreateCustomTypeDynCall {}),
+                box_dyn_call(IncrementCustomTypeDynCall {}),
+                box_dyn_call(IncrementMutableDynCall {}),
+                box_dyn_call(StripCustomTypeDynCall {}),
+            ]
+            .into_iter(),
+        );
         let count = exec.run();
-        assert_eq!(count,4);
-        assert_eq!(exec.value::<i32>(count-1),Some(&2));
+        assert_eq!(count, 4);
+        assert_eq!(exec.value::<i32>(count - 1), Some(&2));
     }
 
     #[test]
     fn test_hand_made_graph() {
-      
-        let mut exec = DynLinearExec::new(vec![
-            box_dyn_call(OneDynCall{}),
-            box_dyn_call(TwoDynCall{}),
-            box_dyn_call(AddDynCall{})
-        ].into_iter());
+        let mut exec = DynLinearExec::new(
+            vec![
+                box_dyn_call(OneDynCall {}),
+                box_dyn_call(TwoDynCall {}),
+                box_dyn_call(AddDynCall {}),
+            ]
+            .into_iter(),
+        );
 
         // Wire the inputs manuall
         exec.inputs(0, vec![]);
         exec.inputs(1, vec![]);
-        exec.inputs(2, vec![0,1]);
+        exec.inputs(2, vec![0, 1]);
 
         // Wire the children manually
         exec.children(0, vec![2]);
@@ -383,7 +424,7 @@ mod tests {
         exec.children(2, vec![]);
 
         let count = exec.run();
-        assert_eq!(count,3);
-        assert_eq!(exec.value::<i32>(count-1),Some(&3));
+        assert_eq!(count, 3);
+        assert_eq!(exec.value::<i32>(count - 1), Some(&3));
     }
 }
