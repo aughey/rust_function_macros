@@ -1,6 +1,7 @@
 pub mod macros;
 pub mod gentest;
 pub mod dyn_call;
+pub mod graph;
 
 #[derive(Default)]
 pub struct MutInt {
