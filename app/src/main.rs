@@ -1,5 +1,5 @@
 use app::{operations, run_operation, exec};
-use ive::run_node;
+use ive_macros::run_node;
 
 fn main() {
     println!("Hello, world!");

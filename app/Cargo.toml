@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 derivative = "2.2.0"
 seq-macro = "0.3.2"
-ive = { path = "../ive", version = "0.1.0" }
+ive_macros = { path = "../ive_macros", version = "0.1.0" }
 
 
 [dev-dependencies]

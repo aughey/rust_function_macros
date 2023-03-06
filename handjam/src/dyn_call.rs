@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use ive::make_dynamicable;
+use ive_macros::make_dynamicable;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DirtyEnum {
@@ -456,8 +456,6 @@ pub fn generate_linear_exec(count: usize) -> DynLinearExec {
 
 #[cfg(test)]
 mod tests {
-
-    use ive::make_dynamicable;
 
     use super::*;
 

@@ -2,7 +2,7 @@
 
 members = [
     "app",
-    "ive",
+    "ive_macros",
     "raw_test",
     "prototype_network",
     "sample_nodes",

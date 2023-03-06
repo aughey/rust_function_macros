@@ -1,4 +1,4 @@
-use ive::ive_chain;
+use ive_macros::ive_chain;
 
 #[derive(Default,Copy,Clone,PartialEq)]
 pub enum DirtyEnum {

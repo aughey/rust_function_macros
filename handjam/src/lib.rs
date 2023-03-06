@@ -1,4 +1,4 @@
-use ive::make_dynamicable;
+//use ive_macros::make_dynamicable;
 
 pub mod macros;
 pub mod gentest;
