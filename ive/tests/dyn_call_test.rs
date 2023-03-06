@@ -183,7 +183,7 @@ fn zero() -> i32 {
         );
         let count = exec.run().expect("failed to run");
         assert_eq!(count, 4);
-        assert_eq!(exec.value::<i32>(count - 1), Some(&2));
+        assert_eq!(exec.value::<i32>(count - 1).unwrap(), &2);
     }
 
     #[test]

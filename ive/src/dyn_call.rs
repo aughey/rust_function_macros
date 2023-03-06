@@ -39,6 +39,16 @@ pub trait DynCall {
     fn output_len(&self) -> usize;
 }
 
+pub type DynType = Vec::<String>;
+pub struct DynPort {
+    pub name: &'static str,
+    pub kind: DynType,
+}
+pub trait DynInfo {
+    fn inputs(&self) -> Vec::<DynPort>;
+    fn output_type(&self) -> &'static[&'static str];
+}
+
 pub struct DynStorage {
     values: Vec<Option<BoxedAny>>,
 }
@@ -97,6 +107,7 @@ enum DynExecError {
     DevBadDirtyIndex,
     DevInputOutOfRange,
     DevFetchNone,
+    DevValueIsNone,
 }
 impl std::fmt::Display for DynExecError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -104,18 +115,20 @@ impl std::fmt::Display for DynExecError {
             DynExecError::DevBadDirtyIndex => write!(f, "Dev Error: Bad dirty index"),
             DynExecError::DevInputOutOfRange => write!(f, "Dev Error: Input out of range"),
             DynExecError::DevFetchNone => write!(f, "Dev Error: Fetch None"),
+            DynExecError::DevValueIsNone => write!(f, "Dev Error: Value is None"),
         }
     }
 }
-impl std::error::Error for DynExecError {
-    fn description(&self) -> &str {
-        match *self {
-            DynExecError::DevBadDirtyIndex => "Dev Error: Bad dirty index",
-            DynExecError::DevInputOutOfRange => "Dev Error: Input out of range",
-            DynExecError::DevFetchNone => "Dev Error: Fetch None",
-        }
-    }
-}
+impl std::error::Error for DynExecError {}
+// impl std::error::Error for DynExecError {
+//     fn description(&self) -> &str {
+//         match *self {
+//             DynExecError::DevBadDirtyIndex => "Dev Error: Bad dirty index",
+//             DynExecError::DevInputOutOfRange => "Dev Error: Input out of range",
+//             DynExecError::DevFetchNone => "Dev Error: Fetch None",
+//         }
+//     }
+// }
 
 trait InputFetch {
     fn fetch<T>(&self, index: usize) -> &T
@@ -235,20 +248,19 @@ impl DynLinearExec {
     pub fn is_none(&self, index: usize) -> bool {
         self.store.values[index].is_none()
     }
-    pub fn value_any(&self, index: usize) -> &Option<BoxedAny> {
-        &self.store.values[index]
-    }
-    pub fn value<T>(&self, index: usize) -> Option<&T>
+
+    pub fn value<T>(&self, index: usize) -> Result<&T, Box<dyn std::error::Error>>
     where
         T: 'static + std::any::Any,
     {
-        let v = self.value_any(index);
-        let v = v.as_ref();
-        if let Some(v) = v {
-            Some(v.value().unwrap())
-        } else {
-            None
-        }
+        let v = self
+            .store
+            .values
+            .get(index)
+            .ok_or_else(|| DynExecError::DevInputOutOfRange)?;
+        v.as_ref()
+            .ok_or_else(|| DynExecError::DevValueIsNone)?
+            .value::<T>()
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -347,4 +359,3 @@ impl DynLinearExec {
 pub fn box_dyn_call<T: DynCall + 'static>(t: T) -> Box<dyn DynCall> {
     Box::new(t)
 }
-

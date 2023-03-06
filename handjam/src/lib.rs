@@ -21,14 +21,17 @@ pub fn zero() -> i32 {
     0
 }
 
+#[make_dynamicable()]
 pub fn one() -> i32 {
     1
 }
 
+#[make_dynamicable()]
 pub fn two() -> i32 {
     2
 }
 
+#[make_dynamicable()]
 pub fn two_optional() -> Option<i32> {
     Some(2)
 }
@@ -40,13 +43,21 @@ pub fn one_result() -> Result<i32, NullError> {
     Ok(1)
 }
 
+#[make_dynamicable()]
 pub fn three() -> i32 {
     3
 }
 
+#[make_dynamicable()]
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
+
+#[make_dynamicable()]
+pub fn multiply(a: i32, b: i32) -> i32 {
+    a * b
+}
+
 
 pub fn mutable_int(value: i32) -> MutInt {
     MutInt { value }
@@ -66,13 +77,11 @@ pub fn tick_no_default(mut_int: &mut MutIntNoDefault) -> i32 {
     mut_int.value
 }
 
+#[make_dynamicable()]
 pub fn int_to_string(value: i32) -> String {
     value.to_string()
 }
 
-pub fn string_slice(string: &str) -> &str {
-    &string[..]
-}
 
 pub fn print(string: &str) {
     println!("{}", string);

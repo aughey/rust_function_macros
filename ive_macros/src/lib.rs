@@ -1,4 +1,4 @@
-use convert_case::{Casing, Case};
+use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, ItemFn, Type};
@@ -105,7 +105,6 @@ where
         }
     )
 }
-
 
 #[proc_macro]
 pub fn ive_chain(input: TokenStream) -> TokenStream {
@@ -232,13 +231,13 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
     let straightline_fn = {
         let sl_name = format_ident!("{}_straightline", fnname);
         let operations = countrange
-        .skip(1) // Skip the first one
-        .map(|i| {
-            let input = format_ident!("value{}", i - 1);
-            let output = format_ident!("value{}", i);
-            let function = format_ident!("add_one");
-            quote!(state.#output = Some(#function(state.#input.unwrap()));)
-        });
+            .skip(1) // Skip the first one
+            .map(|i| {
+                let input = format_ident!("value{}", i - 1);
+                let output = format_ident!("value{}", i);
+                let function = format_ident!("add_one");
+                quote!(state.#output = Some(#function(state.#input.unwrap()));)
+            });
         quote!(
             #[inline(never)]
             pub fn #sl_name(state: &mut #statename, dirty: &mut #dirtyname) -> usize {
@@ -265,7 +264,7 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
       #straightline_fn
     };
 
-//    eprintln!("{}", out);
+    //    eprintln!("{}", out);
 
     out.into()
 }
@@ -365,9 +364,14 @@ pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStream {
-    let input : ItemFn = syn::parse(stream).unwrap();
+    let input: ItemFn = syn::parse(stream).unwrap();
 
-    let ItemFn { attrs, vis, sig, block } = input;
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block,
+    } = input;
 
     // Pull apart sig
     let fnname = &sig.ident;
@@ -378,41 +382,46 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
 
     enum DecomposableType {
         Option,
-        Result
+        Result,
     }
     struct InputType {
         ty: proc_macro2::TokenStream,
-        is_ref: bool
+        name: Box<syn::Pat>,
+        is_ref: bool,
     }
 
-    let input_types = inputs.iter().map(|arg| {
-        match arg {
-            syn::FnArg::Typed(ty) => {
-               match &*ty.ty {
-                     syn::Type::Reference(ty) => {
-                        if ty.mutability.is_some() {
-                            panic!("Cannot have a mutable reference as an input");
-                        }
-                        let ty = &*ty.elem;
-                        InputType{ ty: quote!{#ty}, is_ref: true }
-                     }
-                     syn::Type::Path(ty) => {
-                        let ty = &ty.path;
-                        let first = ty.segments.first().unwrap().ident.to_string();
-                        if ty.segments.len() == 1 && COPYABLE_TYPES.iter().any(|v| *v==first.as_str()) {
-                            InputType{ ty: quote!{#ty}, is_ref: false }
-                        } else {
-                            panic!("Cannot have a non-copyable type as an input");
-                        }
-                     }
-                     _ => panic!("Expected typed argument"),
-               }
-            },
+    let input_types = inputs.iter().map(|arg| match arg {
+        syn::FnArg::Typed(pat_ty) => match &*pat_ty.ty {
+            syn::Type::Reference(ty) => {
+                if ty.mutability.is_some() {
+                    panic!("Cannot have a mutable reference as an input");
+                }
+                let ty = &*ty.elem;
+                InputType {
+                    ty: quote! {#ty},
+                    name: pat_ty.pat.clone(),
+                    is_ref: true,
+                }
+            }
+            syn::Type::Path(ty) => {
+                let ty = &ty.path;
+                let first = ty.segments.first().unwrap().ident.to_string();
+                if ty.segments.len() == 1 && COPYABLE_TYPES.iter().any(|v| *v == first.as_str()) {
+                    InputType {
+                        ty: quote! {#ty},
+                        name: pat_ty.pat.clone(),
+                        is_ref: false,
+                    }
+                } else {
+                    panic!("Cannot have a non-copyable type as an input");
+                }
+            }
             _ => panic!("Expected typed argument"),
-        }
+        },
+        _ => panic!("Expected typed argument"),
     });
 
-    let input_pull = input_types.enumerate().map(|(i, ty)| {
+    let input_pull = input_types.clone().enumerate().map(|(i, ty)| {
         let kind = ty.ty;
         if ty.is_ref {
             quote! {
@@ -437,23 +446,45 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                 match (ty.segments.len(), first.as_str()) {
                     (1, "Option") => Some(DecomposableType::Option),
                     (1, "Result") => Some(DecomposableType::Result),
-                    _ => None
+                    _ => None,
                 }
             }
-            _ => None
+            _ => None,
         }
     } else {
         None
     };
 
+    let input_info = input_types
+        .map(|ty| {
+            let name = ty.name.to_token_stream().to_string();
+            let kind = ty.ty.to_token_stream().into_iter().map(|t| t.to_string());
+            quote! {
+                ive::dyn_call::DynPort {
+                    name: #name,
+                    kind: vec![#(#kind.to_string()),*]
+                }
+            }
+        });
+            
+
+    let output_info = match &sig.output {
+        syn::ReturnType::Type(_, ty) => ty
+            .to_token_stream()
+            .into_iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>(),
+        _ => vec![],
+    };
+
     let output_len = match output_type {
         Some(DecomposableType::Option) => 2,
         Some(DecomposableType::Result) => 2,
-        None => 1
+        None => 1,
     };
-    let output_len = quote!{#output_len as usize};
+    let output_len = quote! {#output_len as usize};
 
-    let output_store  = match output_type {
+    let output_store = match output_type {
         Some(DecomposableType::Option) => {
             quote! {
                 if let Some(output) = output {
@@ -464,7 +495,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                     outputs.some(1,true);
                 }
             }
-        },
+        }
         Some(DecomposableType::Result) => {
             quote! {
                 match output {
@@ -478,7 +509,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                     }
                 }
             }
-        },
+        }
         None => {
             quote! {
                 outputs.some(0,output);
@@ -486,7 +517,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         }
     };
 
-    let wrapper = quote!{
+    let wrapper = quote! {
         struct #dyncall_name;
         impl ive::dyn_call::DynCall for #dyncall_name {
             fn call(&self, inputs: &ive::dyn_call::InputGetter, outputs: &mut ive::dyn_call::OutputSetter) -> ive::dyn_call::DynCallResult {
@@ -503,15 +534,24 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                 #output_len
             }
         }
+        impl ive::dyn_call::DynInfo for #dyncall_name {
+            fn inputs(&self) -> Vec::<ive::dyn_call::DynPort> {
+                vec![ #(#input_info),*]
+            }
+            fn output_type(&self) -> &'static[&'static str] {
+                &[ #(#output_info),* ]
+            }
+        }
     };
 
     quote! {
         #(#attrs)* #vis #sig #block
         #wrapper
-    }.into()
+    }
+    .into()
 }
 
-const COPYABLE_TYPES : &[&str] = &[
+const COPYABLE_TYPES: &[&str] = &[
     "std::cmp::Ordering",
     "Infallible",
     "std::fmt::Alignment",
