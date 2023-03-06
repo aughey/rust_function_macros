@@ -38,7 +38,7 @@ fn bench_dynamic(c: &mut Criterion) {
 
     c.bench_function("chain_dynamic", |b| b.iter(|| {
         exec.set_runnable(0);
-         let count = exec.run();
+         let count = exec.run().expect("Run should succeed");
          assert_eq!(count,CHAIN_LENGTH);
          assert_eq!(exec.value::<i32>(21),Some(&21));
          assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);

@@ -175,6 +175,29 @@ pub struct DynLinearExec {
     nodes: Vec<ExecNode>,
 }
 
+// Create a DynExecError that is an std::error::Error
+#[derive(Debug,PartialEq)]
+enum DynExecError {
+    DevBadDirtyIndex,
+    DevInputOutOfRange,
+}
+impl std::fmt::Display for DynExecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DynExecError::DevBadDirtyIndex => write!(f, "Dev Error: Bad dirty index"),
+            DynExecError::DevInputOutOfRange => write!(f, "Dev Error: Input out of range"),
+        }
+    }
+}
+impl std::error::Error for DynExecError {
+    fn description(&self) -> &str {
+        match *self {
+            DynExecError::DevBadDirtyIndex => "Dev Error: Bad dirty index",
+            DynExecError::DevInputOutOfRange => "Dev Error: Input out of range",
+        }
+    }
+}
+
 impl DynLinearExec {
     fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
         let nodes = nodes
@@ -218,16 +241,17 @@ impl DynLinearExec {
     pub fn set_runnable(&mut self, index: usize) {
         self.dirty.state[index] = DirtyEnum::NeedCompute;
     }
-    pub fn run(&mut self) -> usize {
+    pub fn run(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let nodes = &self.nodes;
         let dirty = &mut self.dirty;
         let store = &mut self.store;
 
         let mut compute_count = 0usize;
 
+        // The nodes store their outputs in order.  This keeps track of the index of the next output
         let mut output_index = 0;
         for (run_index, node) in nodes.iter().enumerate() {
-            let runstate = &mut dirty.state[run_index];
+            let runstate = dirty.state.get_mut(run_index).ok_or(DynExecError::DevBadDirtyIndex)?;
 
             // As much as I lothe nested indentation, I want to keep the same format as the "algorithm"
             if *runstate == DirtyEnum::NeedCompute {        
@@ -237,46 +261,45 @@ impl DynLinearExec {
                     "Input indices not set correctly"
                 );
 
-                // Collect all the inputs into a vector (should keep a vec)
-                // around for good measure to store this, but whatever.
+                // By definition, the inputs must be earlier in the store
+                // than the outputs.  Split the store into two slices, one
+                // for inputs and one for outputs.  We do this so we can
+                // borrow the inputs and outputs separately.
+                // The output_index is where that break happens
+                let (inputs, outputs) = store.values.split_at_mut(output_index);
 
-                // This "one liner" will filter out all the None values.
-                // Right after this, if the lengths don't match, we don't
-                // compute (indicating that one of the inputs was None).
-                let inputs = node
+                // Do a quick sanity check that all the input indicies requested
+                // are in range
+                {
+                    let max_input_index = inputs.len();
+                    if node.input_indices.iter().any(|i| *i >= max_input_index) {
+                        return Err(DynExecError::DevInputOutOfRange.into());
+                    }
+                }
+
+                // cherry pick the inputs from where the node needs them.
+                let inputs_vec = node
                     .input_indices
                     .iter()
-                    .filter_map(|i| store.values[*i].as_ref())
+                    .filter_map(|i| inputs[*i].as_ref()) // This will not panic because we checked above
                     .collect::<Vec<_>>();
+
+                // Create a slice out of it to pass in
+                let inputs = inputs_vec.as_slice();
+
+                // We only need our specific output range.
+                let outputs = &mut outputs[0..node.num_outputs()];
 
                 if inputs.len() == node.num_inputs() {
                     *runstate = DirtyEnum::Clean;
-
-                    // Right now we have to create a new vector for outputs
-                    // This is because we can't pass a mutable slice of Optionals
-                    // to the call function because we borrowed immutable above
-                    let mut outputs: Vec<OptionalValue> = (0..node.num_outputs())
-                        .into_iter()
-                        .map(|_| None)
-                        .collect::<Vec<_>>();
-
-                    _ = Some(node.call.call(inputs.as_slice(), outputs.as_mut_slice()));
-
-                    let store_outputs =
-                        &mut store.values[output_index..(output_index + node.num_outputs())];
-                    assert_eq!(outputs.len(), store_outputs.len());
-
-                    // Another slick one liner to set the outputs
-                    std::iter::zip(store_outputs.iter_mut(), outputs.into_iter())
-                        .for_each(|(s, o)| *s = o);
+                 
+                    node.call.call(inputs,outputs)?;
 
                     compute_count += 1;
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
                     // This slick one liner sets all the outputs to None
-                    store.values[output_index..(output_index + node.num_outputs())]
-                        .iter_mut()
-                        .for_each(|o| *o = None);
+                    outputs.into_iter().for_each(|o| *o = None);
                 }
                 // Run our children
                 for child in node.children.iter() {
@@ -285,7 +308,7 @@ impl DynLinearExec {
             }
             output_index += node.num_outputs();
         }
-        compute_count
+        Ok(compute_count)
     }
 
     fn children(&mut self, node_index: usize, children: ChildrenIndices) {
@@ -327,7 +350,7 @@ mod tests {
 
         let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
 
-        let computed = exec.run();
+        let computed = exec.run().expect("Failed to run");
 
         assert_eq!(computed, 2);
 
@@ -340,7 +363,7 @@ mod tests {
         }
 
         exec.set_runnable(0);
-        let computed = exec.run();
+        let computed = exec.run().expect("Failed to run");
         assert_eq!(computed, 2);
     }
 
@@ -348,13 +371,13 @@ mod tests {
     fn test_dyn_chain() {
         const CHAIN_LENGTH: usize = 10;
         let mut exec = generate_linear_exec(CHAIN_LENGTH);
-        let count = exec.run();
+        let count = exec.run().expect("Failed to run");
         assert_eq!(count, CHAIN_LENGTH);
         assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
         assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
 
         exec.set_runnable(0);
-        let count = exec.run();
+        let count = exec.run().expect("failed to run");
         assert_eq!(count, CHAIN_LENGTH);
     }
 
@@ -377,7 +400,7 @@ mod tests {
             ]
             .into_iter(),
         );
-        let count = exec.run();
+        let count = exec.run().expect("failed to run");
         assert_eq!(count, 2);
         assert_eq!(exec.value_any(0).unwrap().value::<String>(), &"John Aughey");
         assert_eq!(
@@ -397,7 +420,7 @@ mod tests {
             ]
             .into_iter(),
         );
-        let count = exec.run();
+        let count = exec.run().expect("failed to run");
         assert_eq!(count, 4);
         assert_eq!(exec.value::<i32>(count - 1), Some(&2));
     }
@@ -423,7 +446,7 @@ mod tests {
         exec.children(1, vec![2]);
         exec.children(2, vec![]);
 
-        let count = exec.run();
+        let count = exec.run().expect("Failed to run");
         assert_eq!(count, 3);
         assert_eq!(exec.value::<i32>(count - 1), Some(&3));
     }
