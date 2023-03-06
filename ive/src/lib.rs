@@ -376,6 +376,10 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
 
     let dyncall_name = format_ident!("{}DynCall", fnname.to_string().to_case(Case::Pascal));
 
+    enum DecomposableType {
+        Option,
+        Result
+    }
     struct InputType {
         ty: proc_macro2::TokenStream,
         is_ref: bool
@@ -394,7 +398,12 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                      }
                      syn::Type::Path(ty) => {
                         let ty = &ty.path;
-                        InputType{ ty: quote!{#ty}, is_ref: false }
+                        let first = ty.segments.first().unwrap().ident.to_string();
+                        if ty.segments.len() == 1 && COPYABLE_TYPES.iter().any(|v| *v==first.as_str()) {
+                            InputType{ ty: quote!{#ty}, is_ref: false }
+                        } else {
+                            panic!("Cannot have a non-copyable type as an input");
+                        }
                      }
                      _ => panic!("Expected typed argument"),
                }
@@ -416,6 +425,32 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         }
     });
 
+    // Look at the output and see if it's a special type we might be able to decompose.
+    // (Optional or Result)
+    let output_type = if let syn::ReturnType::Type(_, ty) = &sig.output {
+        match &**ty {
+            syn::Type::Path(ty) => {
+                let ty = &ty.path;
+                let first = ty.segments.first().unwrap().ident.to_string();
+                match (ty.segments.len(), first.as_str()) {
+                    (1, "Option") => Some(DecomposableType::Option),
+                    (1, "Result") => Some(DecomposableType::Result),
+                    _ => None
+                }
+            }
+            _ => None
+        }
+    } else {
+        None
+    };
+
+    let output_len = match output_type {
+        Some(DecomposableType::Option) => 2,
+        Some(DecomposableType::Result) => 2,
+        None => 1
+    };
+    let output_len = quote!{#output_len as usize};
+
     let wrapper = quote!{
         struct #dyncall_name;
         impl DynCall for #dyncall_name {
@@ -430,7 +465,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
                 #input_len
             }
             fn output_len(&self) -> usize {
-                1
+                #output_len
             }
         }
     };
@@ -440,3 +475,117 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         #wrapper
     }.into()
 }
+
+const COPYABLE_TYPES : &[&str] = &[
+    "std::cmp::Ordering",
+    "Infallible",
+    "std::fmt::Alignment",
+    "ErrorKind",
+    "SeekFrom",
+    "IpAddr",
+    "Ipv6MulticastScope",
+    "Shutdown",
+    "SocketAddr",
+    "FpCategory",
+    "BacktraceStyle",
+    "Which",
+    "SearchStep",
+    "std::sync::atomic::Ordering",
+    "RecvTimeoutError",
+    "TryRecvError",
+    "bool",
+    "char",
+    "f32",
+    "f64",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "i128",
+    "isize",
+    "!",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "u128",
+    "()",
+    "usize",
+    "CpuidResult",
+    "__m128",
+    "__m128bh",
+    "__m128d",
+    "__m128i",
+    "__m256",
+    "__m256bh",
+    "__m256d",
+    "__m256i",
+    "__m512",
+    "__m512bh",
+    "__m512d",
+    "__m512i",
+    "AllocError",
+    "Global",
+    "Layout",
+    "System",
+    "TypeId",
+    "TryFromSliceError",
+    "CharTryFromError",
+    "TryFromCharError",
+    "Error",
+    "FileTimes",
+    "FileType",
+    "Empty",
+    "Sink",
+    "Assume",
+    "Ipv4Addr",
+    "Ipv6Addr",
+    "SocketAddrV4",
+    "SocketAddrV6",
+    "NonZeroI8",
+    "NonZeroI16",
+    "NonZeroI32",
+    "NonZeroI64",
+    "NonZeroI128",
+    "NonZeroIsize",
+    "NonZeroU8",
+    "NonZeroU16",
+    "NonZeroU32",
+    "NonZeroU64",
+    "NonZeroU128",
+    "NonZeroUsize",
+    "TryFromIntError",
+    "RangeFull",
+    "UCred",
+    "ExitCode",
+    "ExitStatus",
+    "ExitStatusError",
+    "std::ptr::Alignment",
+    "Utf8Error",
+    "RecvError",
+    "WaitTimeoutResult",
+    "RawWakerVTable",
+    "AccessError",
+    "ThreadId",
+    "Duration",
+    "Instant",
+    "SystemTime",
+    "PhantomPinned",
+    "Level",
+    "Span",
+    "LineColumn",
+    "Delimiter",
+    "Spacing",
+    "Metric",
+    "ShouldPanic",
+    "ColorConfig",
+    "OutputFormat",
+    "RunIgnored",
+    "RunStrategy",
+    "Options",
+    "Summary",
+    "TestTimeOptions",
+    "TestType",
+    "NamePadding",
+    "TestId",
+];
