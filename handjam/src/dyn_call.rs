@@ -36,7 +36,8 @@ pub fn add_one(a: i32) -> i32 {
 //         assert_eq!(inputs.len(), 1);
 //         assert_eq!(outputs.len(), 1);
 //         let output = BoxedAny::new(add_one(*inputs[0].value()) );
-//         *outputs[0] = Some(output);
+//         let mut thisout = &outputs[0];
+//        *thisout = Some(output);
 //         Ok(())
 //     }
 //     fn input_len(&self) -> usize {
@@ -104,7 +105,7 @@ pub type AnyInputs<'a> = [&'a BoxedAny];
 pub type AnyOutputs<'a> = [OptionalValue];
 type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
-    fn call(&self, inputs: &AnyInputs, outputs: &mut AnyOutputs) -> DynCallResult;
+    fn call(&self, inputs: &AnyInputs, outputs: &mut [OptionalValue]) -> DynCallResult;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
 }
@@ -214,10 +215,16 @@ impl DynLinearExec {
 
                 if inputs.len() == inputlen {
                     dirty.state[run_index] = DirtyEnum::Clean;
-                    let mut outputs = vec![OptionalValue::None];
-                    let outputs = outputs.as_mut_slice();
-                    _ = Some(node.call(&inputs, outputs));
+
+                    // Right now we have to create a new vector for outputs
+                    // This is because we can't pass a mutable slice of Optionals
+                    // to the call function because we borrowed immutable above
+                    let mut outputs : Vec::<OptionalValue> = vec![None];
+
+                    _ = Some(node.call(&inputs, &mut outputs));
+
                     store.values[run_index] = outputs[0].take();
+
                     compute_count += 1;
                 } else {
                     dirty.state[run_index] = DirtyEnum::Stale;
