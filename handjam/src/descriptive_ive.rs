@@ -17,7 +17,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graphish() {
+    fn test_introspection() {
         let one = crate::OneDynCall {};
         let info = &one as &dyn ive::dyn_call::DynInfo;
 
@@ -38,4 +38,5 @@ mod tests {
         assert_eq!(inputs[1].name, "b".to_string());
         assert_eq!(inputs[1].kind, &["i32"]);
     }
+
 }

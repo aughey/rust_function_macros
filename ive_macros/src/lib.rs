@@ -518,7 +518,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     };
 
     let wrapper = quote! {
-        struct #dyncall_name;
+        pub struct #dyncall_name;
         impl ive::dyn_call::DynCall for #dyncall_name {
             fn call(&self, inputs: &ive::dyn_call::InputGetter, outputs: &mut ive::dyn_call::OutputSetter) -> ive::dyn_call::DynCallResult {
                 assert_eq!(inputs.len(), #input_len, "Expected {} inputs, got {}", #input_len, inputs.len());
