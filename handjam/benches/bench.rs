@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use handjam::{gentest::*, dyn_call::{generate_linear_exec}};
+use handjam::{gentest::*};
+use ive::dyn_call::generate_linear_exec;
 
 fn bench_chain(c: &mut Criterion) {
     let mut state = ChainState::default();

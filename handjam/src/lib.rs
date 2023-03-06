@@ -1,8 +1,9 @@
 //use ive_macros::make_dynamicable;
 
+use ive_macros::make_dynamicable;
+
 pub mod macros;
 pub mod gentest;
-pub mod dyn_call;
 pub mod graph;
 pub mod descriptive_ive;
 
@@ -15,6 +16,7 @@ pub struct MutIntNoDefault {
     value: i32,
 }
 
+#[make_dynamicable()]
 pub fn zero() -> i32 {
     0
 }

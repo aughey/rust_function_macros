@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 daggy = "0.8.0"
 itertools = "0.10.5"
-# ive library in our project
+ive = { version = "0.1.0", path = "../ive" }
 ive_macros = { path = "../ive_macros" }
 petgraph = "0.6.3"
 

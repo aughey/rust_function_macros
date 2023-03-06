@@ -3,6 +3,7 @@
 members = [
     "app",
     "ive_macros",
+    "ive",
     "raw_test",
     "prototype_network",
     "sample_nodes",
