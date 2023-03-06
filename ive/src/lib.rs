@@ -451,14 +451,47 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     };
     let output_len = quote!{#output_len as usize};
 
+    let output_store  = match output_type {
+        Some(DecomposableType::Option) => {
+            quote! {
+                if let Some(output) = output {
+                    outputs[0] = Some(BoxedAny::new(output));
+                    outputs[1] = None;
+                } else {
+                    outputs[0] = None;
+                    outputs[1] = Some(BoxedAny::new(true));
+                }
+            }
+        },
+        Some(DecomposableType::Result) => {
+            quote! {
+                match output {
+                    Ok(output) => {
+                        outputs[0] = Some(BoxedAny::new(output));
+                        outputs[1] = None;
+                    },
+                    Err(e) => {
+                        outputs[0] = None;
+                        outputs[1] = Some(BoxedAny::new(e));
+                    }
+                }
+            }
+        },
+        None => {
+            quote! {
+                outputs[0] = Some(BoxedAny::new(output));
+            }
+        }
+    };
+
     let wrapper = quote!{
         struct #dyncall_name;
         impl DynCall for #dyncall_name {
             fn call(&self, inputs: &AnyInputs, outputs: &mut [OptionalValue]) -> DynCallResult {
-                assert_eq!(inputs.len(), #input_len);
-                assert_eq!(outputs.len(), 1);
-                let output = BoxedAny::new(#fnname(#(#input_pull),*));
-                outputs[0] = Some(output);
+                assert_eq!(inputs.len(), #input_len, "Expected {} inputs, got {}", #input_len, inputs.len());
+                assert_eq!(outputs.len(), #output_len, "Expected {} outputs, got {}", #output_len, outputs.len());
+                let output = #fnname(#(#input_pull),*);
+                #output_store
                 Ok(())
             }
             fn input_len(&self) -> usize {

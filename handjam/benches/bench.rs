@@ -41,8 +41,8 @@ fn bench_dynamic(c: &mut Criterion) {
          let count = exec.run().expect("Run should succeed");
          assert_eq!(count,CHAIN_LENGTH);
          assert_eq!(exec.value::<i32>(21),Some(&21));
-         assert_eq!(exec.value_any(9).unwrap().value::<i32>(),&9);
-         assert_eq!(exec.value_any(99).unwrap().value::<i32>(),&99);
+         assert_eq!(exec.value::<i32>(9).unwrap(),&9);
+         assert_eq!(exec.value::<i32>(99).unwrap(),&99);
     }));
 }
 

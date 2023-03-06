@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ive::make_dynamicable;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone,Debug, PartialEq)]
 pub enum DirtyEnum {
     NeedCompute,
     Stale,
@@ -45,6 +45,20 @@ pub fn add_one(a: i32) -> i32 {
 //         1
 //     }
 // }
+
+#[make_dynamicable()]
+fn is_even(v: i32) -> Option<i32> {
+    if v % 2 == 0 {
+        Some(v)
+    } else {
+        None
+    }
+}
+
+#[make_dynamicable()]
+fn returns_error() -> Result<i32, String> {
+    Err("Error".to_string())
+}
 
 #[derive(Clone)]
 struct CustomType {
@@ -209,8 +223,9 @@ impl DynLinearExec {
             .collect::<Vec<_>>();
 
         let size = nodes.len();
+        let storesize = nodes.iter().map(|n| n.num_outputs()).sum();
         Self {
-            store: DynStorage::new(size),
+            store: DynStorage::new(storesize),
             dirty: DynDirty::new(size),
             nodes,
         }
@@ -223,16 +238,26 @@ impl DynLinearExec {
         }
         exec
     }
-    pub fn value_any(&self, index: usize) -> Option<&BoxedAny> {
-        self.store.values.get(index)?.as_ref()
+    pub fn is_some(&self, index: usize) -> bool {
+        self.store.values[index].is_some()
+    }
+    pub fn is_none(&self, index: usize) -> bool {
+        self.store.values[index].is_none()
+    }
+    pub fn value_any(&self, index: usize) -> &Option<BoxedAny> {
+        &self.store.values[index]
     }
     pub fn value<T>(&self, index: usize) -> Option<&T>
-    where
-        T: Copy + 'static,
+    where 
+        T: 'static + std::any::Any,
     {
-        let v = self.store.values.get(index)?;
-        let v = v.as_ref()?;
-        Some(v.value())
+       let v = self.value_any(index);
+       let v = v.as_ref();
+       if let Some(v) = v {
+           Some(v.value())
+       } else {
+           None
+       }
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -373,8 +398,7 @@ mod tests {
         let mut exec = generate_linear_exec(CHAIN_LENGTH);
         let count = exec.run().expect("Failed to run");
         assert_eq!(count, CHAIN_LENGTH);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
-        assert_eq!(exec.value_any(9).unwrap().value::<i32>(), &9);
+        assert_eq!(exec.value::<i32>(9).unwrap(), &9);
 
         exec.set_runnable(0);
         let count = exec.run().expect("failed to run");
@@ -402,9 +426,9 @@ mod tests {
         );
         let count = exec.run().expect("failed to run");
         assert_eq!(count, 2);
-        assert_eq!(exec.value_any(0).unwrap().value::<String>(), &"John Aughey");
+        assert_eq!(exec.value::<String>(0).unwrap(), &"John Aughey");
         assert_eq!(
-            exec.value_any(1).unwrap().value::<String>(),
+            exec.value::<String>(1).unwrap(),
             &"John AugheyJohn Aughey"
         );
     }
@@ -449,5 +473,54 @@ mod tests {
         let count = exec.run().expect("Failed to run");
         assert_eq!(count, 3);
         assert_eq!(exec.value::<i32>(count - 1), Some(&3));
+    }
+
+    #[test]
+    fn test_optional_output() {
+        let nodes = vec![
+            box_dyn_call(OneDynCall {}),
+            box_dyn_call(IsEvenDynCall {}),
+            box_dyn_call(AddOneDynCall {})
+        ];
+
+        let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
+    
+        let count = exec.run().expect("Failed to run");
+        assert_eq!(count, 2); // last one shouldn't run
+        assert_eq!(exec.run_state(0), DirtyEnum::Clean);
+        assert_eq!(exec.run_state(1), DirtyEnum::Clean);
+        assert_eq!(exec.run_state(2), DirtyEnum::Stale);
+
+        let count = exec.run().expect("Failed to run");
+        assert_eq!(count, 0);
+
+        // Now make a new one with an even number
+        let nodes = vec![
+            box_dyn_call(TwoDynCall {}),
+            box_dyn_call(IsEvenDynCall {}),
+            box_dyn_call(AddOneDynCall {})
+        ];
+
+        let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
+
+        let count = exec.run().expect("Failed to run");
+        assert_eq!(count, 3); // All runs
+    }
+
+    #[test]
+    fn test_result_output() {
+        let nodes = vec![
+            box_dyn_call(ReturnsErrorDynCall {})
+        ];
+
+        let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
+        let count = exec.run().expect("Failed to run");
+        assert_eq!(count, 1);
+
+        assert!(exec.is_none(0));
+        assert!(exec.is_some(1));
+
+        let err = exec.value::<String>(1).unwrap();
+        assert_eq!(err, "Error");
     }
 }
