@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ive::make_dynamicable;
 
-#[derive(Copy, Clone,Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DirtyEnum {
     NeedCompute,
     Stale,
@@ -127,7 +127,7 @@ pub type AnyInputs<'a> = [&'a BoxedAny];
 pub type AnyOutputs<'a> = [OptionalValue];
 type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
-    fn call(&self, inputs: &AnyInputs, outputs: &mut [OptionalValue]) -> DynCallResult;
+    fn call(&self, inputs: ArrayGather, outputs: &mut ArrayScatter) -> DynCallResult;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
 }
@@ -190,7 +190,7 @@ pub struct DynLinearExec {
 }
 
 // Create a DynExecError that is an std::error::Error
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 enum DynExecError {
     DevBadDirtyIndex,
     DevInputOutOfRange,
@@ -209,6 +209,49 @@ impl std::error::Error for DynExecError {
             DynExecError::DevBadDirtyIndex => "Dev Error: Bad dirty index",
             DynExecError::DevInputOutOfRange => "Dev Error: Input out of range",
         }
+    }
+}
+
+trait InputFetch {
+    fn fetch<T>(&self, index: usize) -> &T
+    where
+        T: 'static + std::any::Any;
+    fn len() -> usize;
+}
+pub struct ArrayGather<'a> {
+    values: &'a [OptionalValue],
+    indices: &'a [usize],
+}
+impl<'a> ArrayGather<'a> {
+    pub fn fetch<T>(&'a self, index: usize) -> &'a T
+    where
+        T: 'static + std::any::Any,
+    {
+        self.values[self.indices[index]]
+            .as_ref()
+            .unwrap()
+            .value::<T>()
+    }
+    pub fn len(&self) -> usize {
+        self.indices.len()
+    }
+}
+pub struct ArrayScatter<'a> {
+    values: &'a mut [OptionalValue]
+}
+impl<'a> ArrayScatter<'a> {
+    pub fn some<T>(&mut self, index: usize, value: T)
+    where
+        T: 'static + std::any::Any,
+    {
+        self.values[index] = Some(BoxedAny::new(value));
+    }
+    pub fn none(&mut self, index: usize)
+    {
+        self.values[index] = None;
+    }
+    pub fn len(&self) -> usize {
+        self.values.len()
     }
 }
 
@@ -248,16 +291,16 @@ impl DynLinearExec {
         &self.store.values[index]
     }
     pub fn value<T>(&self, index: usize) -> Option<&T>
-    where 
+    where
         T: 'static + std::any::Any,
     {
-       let v = self.value_any(index);
-       let v = v.as_ref();
-       if let Some(v) = v {
-           Some(v.value())
-       } else {
-           None
-       }
+        let v = self.value_any(index);
+        let v = v.as_ref();
+        if let Some(v) = v {
+            Some(v.value())
+        } else {
+            None
+        }
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -276,10 +319,13 @@ impl DynLinearExec {
         // The nodes store their outputs in order.  This keeps track of the index of the next output
         let mut output_index = 0;
         for (run_index, node) in nodes.iter().enumerate() {
-            let runstate = dirty.state.get_mut(run_index).ok_or(DynExecError::DevBadDirtyIndex)?;
+            let runstate = dirty
+                .state
+                .get_mut(run_index)
+                .ok_or(DynExecError::DevBadDirtyIndex)?;
 
             // As much as I lothe nested indentation, I want to keep the same format as the "algorithm"
-            if *runstate == DirtyEnum::NeedCompute {        
+            if *runstate == DirtyEnum::NeedCompute {
                 assert_eq!(
                     node.num_inputs(),
                     node.input_indices.len(),
@@ -302,23 +348,25 @@ impl DynLinearExec {
                     }
                 }
 
-                // cherry pick the inputs from where the node needs them.
-                let inputs_vec = node
-                    .input_indices
-                    .iter()
-                    .filter_map(|i| inputs[*i].as_ref()) // This will not panic because we checked above
-                    .collect::<Vec<_>>();
-
-                // Create a slice out of it to pass in
-                let inputs = inputs_vec.as_slice();
+                // See if any of the inputs are None
+                let missing_inputs = node.input_indices.iter().any(|i| inputs[*i].is_none());
 
                 // We only need our specific output range.
                 let outputs = &mut outputs[0..node.num_outputs()];
 
-                if inputs.len() == node.num_inputs() {
+                if !missing_inputs {
                     *runstate = DirtyEnum::Clean;
-                 
-                    node.call.call(inputs,outputs)?;
+
+                    let fetch = ArrayGather {
+                        values: inputs,
+                        indices: &node.input_indices,
+                    };
+
+                    let mut setter = ArrayScatter {
+                        values: outputs
+                    };
+
+                    node.call.call(fetch, &mut setter)?;
 
                     compute_count += 1;
                 } else {
@@ -427,10 +475,7 @@ mod tests {
         let count = exec.run().expect("failed to run");
         assert_eq!(count, 2);
         assert_eq!(exec.value::<String>(0).unwrap(), &"John Aughey");
-        assert_eq!(
-            exec.value::<String>(1).unwrap(),
-            &"John AugheyJohn Aughey"
-        );
+        assert_eq!(exec.value::<String>(1).unwrap(), &"John AugheyJohn Aughey");
     }
 
     #[test]
@@ -480,11 +525,11 @@ mod tests {
         let nodes = vec![
             box_dyn_call(OneDynCall {}),
             box_dyn_call(IsEvenDynCall {}),
-            box_dyn_call(AddOneDynCall {})
+            box_dyn_call(AddOneDynCall {}),
         ];
 
         let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
-    
+
         let count = exec.run().expect("Failed to run");
         assert_eq!(count, 2); // last one shouldn't run
         assert_eq!(exec.run_state(0), DirtyEnum::Clean);
@@ -498,7 +543,7 @@ mod tests {
         let nodes = vec![
             box_dyn_call(TwoDynCall {}),
             box_dyn_call(IsEvenDynCall {}),
-            box_dyn_call(AddOneDynCall {})
+            box_dyn_call(AddOneDynCall {}),
         ];
 
         let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
@@ -509,9 +554,7 @@ mod tests {
 
     #[test]
     fn test_result_output() {
-        let nodes = vec![
-            box_dyn_call(ReturnsErrorDynCall {})
-        ];
+        let nodes = vec![box_dyn_call(ReturnsErrorDynCall {})];
 
         let mut exec = DynLinearExec::new_linear_chain(nodes.into_iter());
         let count = exec.run().expect("Failed to run");

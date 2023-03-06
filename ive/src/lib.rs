@@ -416,11 +416,13 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         let kind = ty.ty;
         if ty.is_ref {
             quote! {
-                inputs[#i].value::<#kind>()
+            //    inputs[#i].value::<#kind>()
+                inputs.fetch::<#kind>(#i)
             }
         } else {
             quote! {
-                *inputs[#i].value::<#kind>()
+                //*inputs[#i].value::<#kind>()
+                *inputs.fetch::<#kind>(#i)
             }
         }
     });
@@ -455,11 +457,11 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         Some(DecomposableType::Option) => {
             quote! {
                 if let Some(output) = output {
-                    outputs[0] = Some(BoxedAny::new(output));
-                    outputs[1] = None;
+                    outputs.some(0,output);
+                    outputs.none(1);
                 } else {
-                    outputs[0] = None;
-                    outputs[1] = Some(BoxedAny::new(true));
+                    outputs.none(0);
+                    outputs.some(1,true);
                 }
             }
         },
@@ -467,19 +469,19 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
             quote! {
                 match output {
                     Ok(output) => {
-                        outputs[0] = Some(BoxedAny::new(output));
-                        outputs[1] = None;
+                        outputs.some(0,output);
+                        outputs.none(1);
                     },
                     Err(e) => {
-                        outputs[0] = None;
-                        outputs[1] = Some(BoxedAny::new(e));
+                        outputs.none(0);
+                        outputs.some(1,e);
                     }
                 }
             }
         },
         None => {
             quote! {
-                outputs[0] = Some(BoxedAny::new(output));
+                outputs.some(0,output);
             }
         }
     };
@@ -487,7 +489,7 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
     let wrapper = quote!{
         struct #dyncall_name;
         impl DynCall for #dyncall_name {
-            fn call(&self, inputs: &AnyInputs, outputs: &mut [OptionalValue]) -> DynCallResult {
+            fn call(&self, inputs: ArrayGather, outputs: &mut ArrayScatter) -> DynCallResult {
                 assert_eq!(inputs.len(), #input_len, "Expected {} inputs, got {}", #input_len, inputs.len());
                 assert_eq!(outputs.len(), #output_len, "Expected {} outputs, got {}", #output_len, outputs.len());
                 let output = #fnname(#(#input_pull),*);
