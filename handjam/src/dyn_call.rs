@@ -124,7 +124,7 @@ impl BoxedAny {
 pub type OptionalValue = Option<BoxedAny>;
 pub type AnyInputs<'a> = [&'a BoxedAny];
 pub type AnyOutputs<'a> = [OptionalValue];
-type DynCallResult = Result<(), Box<dyn std::error::Error>>;
+pub type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
     fn call(&self, inputs: &InputGetter, outputs: &mut OutputSetter) -> DynCallResult;
     fn input_len(&self) -> usize;

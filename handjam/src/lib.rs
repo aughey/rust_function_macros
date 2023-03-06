@@ -1,7 +1,10 @@
+use ive::make_dynamicable;
+
 pub mod macros;
 pub mod gentest;
 pub mod dyn_call;
 pub mod graph;
+pub mod descriptive_ive;
 
 #[derive(Default)]
 pub struct MutInt {
