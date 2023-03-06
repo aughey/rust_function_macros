@@ -238,11 +238,15 @@ impl<'a> InputGetter<'a> {
 }
 pub struct OutputSetter<'a> {
     values: &'a mut [OptionalValue],
-    set_count: usize
+    set_count: usize,
 }
 impl Drop for OutputSetter<'_> {
     fn drop(&mut self) {
-        assert_eq!(self.set_count, self.values.len(), "Not all outputs were set");
+        assert_eq!(
+            self.set_count,
+            self.values.len(),
+            "Not all outputs were set"
+        );
     }
 }
 impl<'a> OutputSetter<'a> {
@@ -253,8 +257,7 @@ impl<'a> OutputSetter<'a> {
         self.values[index] = Some(BoxedAny::new(value));
         self.set_count += 1;
     }
-    pub fn none(&mut self, index: usize)
-    {
+    pub fn none(&mut self, index: usize) {
         self.values[index] = None;
         self.set_count += 1;
     }
@@ -345,7 +348,12 @@ impl DynLinearExec {
                 // for inputs and one for outputs.  We do this so we can
                 // borrow the inputs and outputs separately.
                 // The output_index is where that break happens
-                let (inputs, outputs) = store.values.split_at_mut(output_index);
+                let (inputs, outputs) = {
+                    let (i, o) = store.values.split_at_mut(output_index);
+                    // We only need our specific output range.
+                    // And downgrade our inputs to readonly
+                    (&i[0..i.len()], &mut o[0..node.num_outputs()])
+                };
 
                 // Do a quick sanity check that all the input indicies requested
                 // are in range
@@ -359,9 +367,6 @@ impl DynLinearExec {
                 // See if any of the inputs are None
                 let missing_inputs = node.input_indices.iter().any(|i| inputs[*i].is_none());
 
-                // We only need our specific output range.
-                let outputs = &mut outputs[0..node.num_outputs()];
-
                 if !missing_inputs {
                     *runstate = DirtyEnum::Clean;
 
@@ -372,7 +377,7 @@ impl DynLinearExec {
 
                     let mut setter = OutputSetter {
                         values: outputs,
-                        set_count: 0
+                        set_count: 0,
                     };
 
                     node.call.call(&fetch, &mut setter)?;
