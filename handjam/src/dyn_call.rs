@@ -127,7 +127,7 @@ pub type AnyInputs<'a> = [&'a BoxedAny];
 pub type AnyOutputs<'a> = [OptionalValue];
 type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
-    fn call(&self, inputs: ArrayGather, outputs: &mut ArrayScatter) -> DynCallResult;
+    fn call(&self, inputs: &InputGetter, outputs: &mut OutputSetter) -> DynCallResult;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
 }
@@ -218,11 +218,11 @@ trait InputFetch {
         T: 'static + std::any::Any;
     fn len() -> usize;
 }
-pub struct ArrayGather<'a> {
+pub struct InputGetter<'a> {
     values: &'a [OptionalValue],
     indices: &'a [usize],
 }
-impl<'a> ArrayGather<'a> {
+impl<'a> InputGetter<'a> {
     pub fn fetch<T>(&'a self, index: usize) -> &'a T
     where
         T: 'static + std::any::Any,
@@ -236,10 +236,10 @@ impl<'a> ArrayGather<'a> {
         self.indices.len()
     }
 }
-pub struct ArrayScatter<'a> {
+pub struct OutputSetter<'a> {
     values: &'a mut [OptionalValue]
 }
-impl<'a> ArrayScatter<'a> {
+impl<'a> OutputSetter<'a> {
     pub fn some<T>(&mut self, index: usize, value: T)
     where
         T: 'static + std::any::Any,
@@ -357,16 +357,16 @@ impl DynLinearExec {
                 if !missing_inputs {
                     *runstate = DirtyEnum::Clean;
 
-                    let fetch = ArrayGather {
+                    let fetch = InputGetter {
                         values: inputs,
                         indices: &node.input_indices,
                     };
 
-                    let mut setter = ArrayScatter {
+                    let mut setter = OutputSetter {
                         values: outputs
                     };
 
-                    node.call.call(fetch, &mut setter)?;
+                    node.call.call(&fetch, &mut setter)?;
 
                     compute_count += 1;
                 } else {
