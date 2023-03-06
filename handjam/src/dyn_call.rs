@@ -350,8 +350,8 @@ impl DynLinearExec {
                 // The output_index is where that break happens
                 let (inputs, outputs) = {
                     let (i, o) = store.values.split_at_mut(output_index);
+                    // Downgrade our inputs to readonly
                     // We only need our specific output range.
-                    // And downgrade our inputs to readonly
                     (&i[0..i.len()], &mut o[0..node.num_outputs()])
                 };
 
