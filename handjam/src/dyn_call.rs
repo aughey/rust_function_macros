@@ -148,24 +148,35 @@ impl DynDirty {
 
 type ChildrenIndices = Vec<usize>;
 type InputIndices = Vec<usize>;
+struct ExecNode {
+    call: Box<dyn DynCall>,
+    input_indices: InputIndices,
+    children: ChildrenIndices,
+}
+impl ExecNode {
+    fn num_inputs(&self) -> usize {
+        self.input_indices.len()
+    }
+}
 pub struct DynLinearExec {
     store: DynStorage,
     dirty: DynDirty,
-    nodes: Vec<Box<dyn DynCall>>,
-    input_indices: Vec<InputIndices>,
-    children: Vec<ChildrenIndices>,
+    nodes: Vec<ExecNode>,
 }
 
 impl DynLinearExec {
     fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
-        let nodes = nodes.collect::<Vec<_>>();
+        let nodes = nodes.map(|n| ExecNode {
+            call: n,
+            input_indices: Vec::new(),
+            children: Vec::new()
+        }).collect::<Vec<_>>();
+
         let size = nodes.len();
         Self {
             store: DynStorage::new(size),
             dirty: DynDirty::new(size),
-            nodes,
-            input_indices: vec![Vec::new(); size],
-            children: vec![Vec::new(); size]
+            nodes
         }
     }
     pub fn new_linear_chain(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
@@ -203,8 +214,8 @@ impl DynLinearExec {
             
             if dirty.state[run_index] == DirtyEnum::NeedCompute {
                 let mut inputs = Vec::<&BoxedAny>::new();
-                let inputlen = node.input_len();
-                assert_eq!(inputlen, self.input_indices[run_index].len(), "Input indices not set correctly");
+                let inputlen = node.num_inputs();
+                assert_eq!(inputlen, node.input_indices.len(), "Input indices not set correctly");
 
                 for _inputindex in 0..inputlen {
                     if let Some(value) = store.values[running_input_index].as_ref() {
@@ -221,7 +232,7 @@ impl DynLinearExec {
                     // to the call function because we borrowed immutable above
                     let mut outputs : Vec::<OptionalValue> = vec![None];
 
-                    _ = Some(node.call(&inputs, &mut outputs));
+                    _ = Some(node.call.call(&inputs, &mut outputs));
 
                     store.values[run_index] = outputs[0].take();
 
@@ -230,7 +241,7 @@ impl DynLinearExec {
                     dirty.state[run_index] = DirtyEnum::Stale;
                 }
                 // Run our children
-                for child in self.children[run_index].iter() {
+                for child in node.children.iter() {
                     dirty.state[*child] = DirtyEnum::NeedCompute;
                 }
             }
@@ -238,12 +249,12 @@ impl DynLinearExec {
         compute_count
     }
 
-    fn children(&mut self, index: usize, children: ChildrenIndices) {
-        self.children[index] = children;
+    fn children(&mut self, node_index: usize, children: ChildrenIndices) {
+        self.nodes[node_index].children = children;
     }
 
-    fn inputs(&mut self, i: usize, indices: Vec<usize>) {
-        self.input_indices[i] = indices;
+    fn inputs(&mut self, node_index: usize, indices: Vec<usize>) {
+        self.nodes[node_index].input_indices = indices;
     }
 }
 
