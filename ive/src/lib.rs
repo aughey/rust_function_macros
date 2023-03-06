@@ -417,12 +417,12 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
         if ty.is_ref {
             quote! {
             //    inputs[#i].value::<#kind>()
-                inputs.fetch::<#kind>(#i)
+                inputs.fetch::<#kind>(#i)?
             }
         } else {
             quote! {
                 //*inputs[#i].value::<#kind>()
-                *inputs.fetch::<#kind>(#i)
+                *inputs.fetch::<#kind>(#i)?
             }
         }
     });

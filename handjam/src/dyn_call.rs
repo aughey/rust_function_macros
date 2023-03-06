@@ -112,13 +112,12 @@ impl BoxedAny {
         }
     }
 
-    pub fn value<T>(&self) -> &T
+    pub fn value<T>(&self) -> Result<&T,Box<dyn std::error::Error>>
     where
         T: 'static + std::any::Any,
     {
         self.any
-            .downcast_ref::<T>()
-            .expect("Unable to downcast any to given type")
+            .downcast_ref::<T>().ok_or_else(|| "Unable to downcast any to given type".into())
     }
 }
 
@@ -194,12 +193,14 @@ pub struct DynLinearExec {
 enum DynExecError {
     DevBadDirtyIndex,
     DevInputOutOfRange,
+    DevFetchNone,
 }
 impl std::fmt::Display for DynExecError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DynExecError::DevBadDirtyIndex => write!(f, "Dev Error: Bad dirty index"),
             DynExecError::DevInputOutOfRange => write!(f, "Dev Error: Input out of range"),
+            DynExecError::DevFetchNone => write!(f, "Dev Error: Fetch None"),
         }
     }
 }
@@ -208,6 +209,7 @@ impl std::error::Error for DynExecError {
         match *self {
             DynExecError::DevBadDirtyIndex => "Dev Error: Bad dirty index",
             DynExecError::DevInputOutOfRange => "Dev Error: Input out of range",
+            DynExecError::DevFetchNone => "Dev Error: Fetch None",
         }
     }
 }
@@ -223,13 +225,13 @@ pub struct InputGetter<'a> {
     indices: &'a [usize],
 }
 impl<'a> InputGetter<'a> {
-    pub fn fetch<T>(&'a self, index: usize) -> &'a T
+    pub fn fetch<T>(&'a self, index: usize) -> Result<&'a T, Box<dyn std::error::Error>>
     where
         T: 'static + std::any::Any,
     {
         self.values[self.indices[index]]
-            .as_ref()
-            .unwrap()
+            .as_ref().ok_or(DynExecError::DevFetchNone)?
+            //.unwrap()
             .value::<T>()
     }
     pub fn len(&self) -> usize {
@@ -308,7 +310,7 @@ impl DynLinearExec {
         let v = self.value_any(index);
         let v = v.as_ref();
         if let Some(v) = v {
-            Some(v.value())
+            Some(v.value().unwrap())
         } else {
             None
         }
@@ -443,7 +445,7 @@ mod tests {
 
         let value1 = exec.value_any(1);
         if let Some(value1) = value1 {
-            let value1_box = value1.value::<i32>();
+            let value1_box = value1.value::<i32>().unwrap();
             assert_eq!(*value1_box, 2);
         } else {
             assert!(false);
