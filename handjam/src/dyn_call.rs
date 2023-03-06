@@ -237,7 +237,13 @@ impl<'a> InputGetter<'a> {
     }
 }
 pub struct OutputSetter<'a> {
-    values: &'a mut [OptionalValue]
+    values: &'a mut [OptionalValue],
+    set_count: usize
+}
+impl Drop for OutputSetter<'_> {
+    fn drop(&mut self) {
+        assert_eq!(self.set_count, self.values.len(), "Not all outputs were set");
+    }
 }
 impl<'a> OutputSetter<'a> {
     pub fn some<T>(&mut self, index: usize, value: T)
@@ -245,10 +251,12 @@ impl<'a> OutputSetter<'a> {
         T: 'static + std::any::Any,
     {
         self.values[index] = Some(BoxedAny::new(value));
+        self.set_count += 1;
     }
     pub fn none(&mut self, index: usize)
     {
         self.values[index] = None;
+        self.set_count += 1;
     }
     pub fn len(&self) -> usize {
         self.values.len()
@@ -363,7 +371,8 @@ impl DynLinearExec {
                     };
 
                     let mut setter = OutputSetter {
-                        values: outputs
+                        values: outputs,
+                        set_count: 0
                     };
 
                     node.call.call(&fetch, &mut setter)?;
