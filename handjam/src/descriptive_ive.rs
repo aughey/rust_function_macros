@@ -39,4 +39,17 @@ mod tests {
         assert_eq!(inputs[1].kind, &["i32"]);
     }
 
+    #[test]
+    fn test_network() {
+        let mut builder = crate::graph::GraphBuilder::new();
+
+        let mut one = builder.add_node(box_dyn_call(crate::OneDynCall {}));
+        let add = builder.add_node(box_dyn_call(crate::AddDynCall {}));
+
+        one.out_port("value").connect_to(add.in_port("a"));
+        one.out_port("value").connect_to(add.in_port("b"));
+
+        let graph = builder.build();
+        
+    }
 }

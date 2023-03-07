@@ -68,6 +68,15 @@ impl<NODETYPE, PORTTYPE> GraphBuilder<NODETYPE, PORTTYPE> {
     pub fn build(self) -> Graph<NODETYPE, (PORTTYPE, PORTTYPE)> {
         self.dag.take()
     }
+    pub fn sort(self) -> Result<Vec<NodeIndex>,Box<dyn std::error::Error>> {
+        let dag = self.dag.take();
+
+        let sorted = petgraph::algo::toposort(&dag, None).map_err(|_| "Cycle detected")?;
+    
+        // Reverse the edges, we need to know where the edges go to, not from
+        
+        Ok(sorted)
+    }
 }
 
 #[cfg(test)]

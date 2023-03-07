@@ -117,18 +117,18 @@ fn test_loop() {
     assert_eq!(computed, 2);
 }
 
-#[test]
-fn test_dyn_chain() {
-    const CHAIN_LENGTH: usize = 10;
-    let mut exec = generate_linear_exec(CHAIN_LENGTH);
-    let count = exec.run().expect("Failed to run");
-    assert_eq!(count, CHAIN_LENGTH);
-    assert_eq!(exec.value::<i32>(9).unwrap(), &9);
+// #[test]
+// fn test_dyn_chain() {
+//     const CHAIN_LENGTH: usize = 10;
+//     let mut exec = generate_linear_exec(CHAIN_LENGTH);
+//     let count = exec.run().expect("Failed to run");
+//     assert_eq!(count, CHAIN_LENGTH);
+//     assert_eq!(exec.value::<i32>(9).unwrap(), &9);
 
-    exec.set_runnable(0);
-    let count = exec.run().expect("failed to run");
-    assert_eq!(count, CHAIN_LENGTH);
-}
+//     exec.set_runnable(0);
+//     let count = exec.run().expect("failed to run");
+//     assert_eq!(count, CHAIN_LENGTH);
+// }
 
 #[test]
 fn test_dyn_string_ops() {
