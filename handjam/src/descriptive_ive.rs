@@ -33,11 +33,12 @@ pub struct SortedGraph<'a> {
 }
 impl<'a> IntoIterator for SortedGraph<'a> {
     type Item = &'a Node;
-    type IntoIter = std::iter::Map<std::slice::Iter<'a, usize>, fn(&usize) -> &'a Node>;
+    type IntoIter = Map<Iter<usize>, |&usize| -> &<Vec<Node> as Index<&usize>>::Output>;
     fn into_iter(self) -> Self::IntoIter {
-        self.sort
+       let it = self.sort
             .iter()
-            .map(|i| &self.graph.nodes[i])
+            .map(|i| &self.graph.nodes[i]);
+        it
     }   
 }
 
