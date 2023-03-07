@@ -6,7 +6,6 @@ pub mod macros;
 pub mod gentest;
 pub mod graph;
 pub mod descriptive_ive;
-
 #[make_dynamicable()]
 pub fn zero() -> i32 {
     0

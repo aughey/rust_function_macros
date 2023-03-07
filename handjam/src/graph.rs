@@ -73,8 +73,6 @@ impl<NODETYPE, PORTTYPE> GraphBuilder<NODETYPE, PORTTYPE> {
 
         let sorted = petgraph::algo::toposort(&dag, None).map_err(|_| "Cycle detected")?;
     
-        // Reverse the edges, we need to know where the edges go to, not from
-        
         Ok(sorted)
     }
 }
