@@ -37,16 +37,14 @@ pub trait DynCall {
     fn call(&self, inputs: &InputGetter, outputs: &mut OutputSetter) -> DynCallResult;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
+    fn inputs(&self) -> Vec<DynPort>;
+    fn output_type(&self) -> &'static [&'static str];
 }
 
-pub type DynType = Vec::<String>;
+pub type DynType = Vec<String>;
 pub struct DynPort {
     pub name: &'static str,
     pub kind: DynType,
-}
-pub trait DynInfo {
-    fn inputs(&self) -> Vec::<DynPort>;
-    fn output_type(&self) -> &'static[&'static str];
 }
 
 pub struct DynStorage {
@@ -89,6 +87,7 @@ struct ExecNode {
 }
 impl ExecNode {
     fn num_inputs(&self) -> usize {
+        assert_eq!(self.call.input_len(), self.input_indices.len(), "Dev Error: Node input length mismatch");
         self.input_indices.len()
     }
     fn num_outputs(&self) -> usize {
@@ -204,7 +203,7 @@ pub trait HasChildrenIndices {
 }
 
 impl DynLinearExec {
-    fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
+    pub fn new(nodes: impl Iterator<Item = Box<dyn DynCall>>) -> Self {
         let nodes = nodes
             .map(|n| ExecNode {
                 call: n,
@@ -264,9 +263,7 @@ impl DynLinearExec {
             .values
             .get(index)
             .ok_or(DynExecError::InputOutOfRange)?;
-        v.as_ref()
-            .ok_or(DynExecError::ValueIsNone)?
-            .value::<T>()
+        v.as_ref().ok_or(DynExecError::ValueIsNone)?.value::<T>()
     }
 
     pub fn run_state(&self, index: usize) -> DirtyEnum {
@@ -292,11 +289,15 @@ impl DynLinearExec {
 
             // As much as I lothe nested indentation, I want to keep the same format as the "algorithm"
             if *runstate == DirtyEnum::NeedCompute {
-                assert_eq!(
-                    node.num_inputs(),
-                    node.input_indices.len(),
-                    "Input indices not set correctly"
-                );
+                {
+                    let num_in = node.num_inputs();
+                    let input_indicides = node.input_indices.len();
+                    assert_eq!(
+                        num_in,
+                        input_indicides,
+                        "Input indices not set correctly"
+                    );
+                }
 
                 // By definition, the inputs must be earlier in the store
                 // than the outputs.  Split the store into two slices, one

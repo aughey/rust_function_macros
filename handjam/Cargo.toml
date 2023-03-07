@@ -6,11 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.69"
 daggy = "0.8.0"
 itertools = "0.10.5"
 ive = { version = "0.1.0", path = "../ive" }
 ive_macros = { path = "../ive_macros" }
 petgraph = "0.6.3"
+uuid = { version = "1.3.0", features = ["v4"] }
 
 [dev-dependencies]
 criterion = "0.4.0"

@@ -533,8 +533,6 @@ pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStr
             fn output_len(&self) -> usize {
                 #output_len
             }
-        }
-        impl ive::dyn_call::DynInfo for #dyncall_name {
             fn inputs(&self) -> Vec::<ive::dyn_call::DynPort> {
                 vec![ #(#input_info),*]
             }
