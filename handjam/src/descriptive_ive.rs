@@ -23,7 +23,10 @@ pub struct PODGraph {
 }
 impl PODGraph {
     fn node_index(&self, id: &Id) -> anyhow::Result<usize> {
-        self.nodes.iter().position(|n| n.id == *id).ok_or_else(|| anyhow!("Node {} not found",id))
+        self.nodes
+            .iter()
+            .position(|n| n.id == *id)
+            .ok_or_else(|| anyhow!("Node {} not found", id))
     }
 }
 
@@ -31,15 +34,11 @@ pub struct SortedGraph<'a> {
     sort: Vec<usize>,
     graph: &'a PODGraph,
 }
-impl<'a> IntoIterator for SortedGraph<'a> {
-    type Item = &'a Node;
-    type IntoIter = Map<Iter<usize>, |&usize| -> &<Vec<Node> as Index<&usize>>::Output>;
-    fn into_iter(self) -> Self::IntoIter {
-       let it = self.sort
-            .iter()
-            .map(|i| &self.graph.nodes[i]);
-        it
-    }   
+impl<'a> SortedGraph<'a> {
+    /// Returns the nodes in sorted order
+    pub fn iter(&'a self) -> impl Iterator<Item = &'a Node> {
+        self.sort.iter().map(|i| &self.graph.nodes[*i])
+    }
 }
 
 pub fn pod_to_sorted(graph: &PODGraph) -> anyhow::Result<SortedGraph> {
@@ -152,9 +151,10 @@ pub trait NodeFactory {
     fn create(&self, node: &Node) -> anyhow::Result<Box<dyn DynCall>>;
 }
 
-
-
-pub fn sorted_to_exec(sorted: &SortedGraph, factory: impl NodeFactory) -> anyhow::Result<DynLinearExec> {
+pub fn sorted_to_exec(
+    sorted: &SortedGraph,
+    factory: impl NodeFactory,
+) -> anyhow::Result<DynLinearExec> {
     let compute_nodes = sorted
         .iter()
         .map(|node| factory.create(node))
@@ -162,7 +162,8 @@ pub fn sorted_to_exec(sorted: &SortedGraph, factory: impl NodeFactory) -> anyhow
 
     // Generate a list of the output indices
     let mut output_indices = vec![];
-    { // populate output_indices
+    {
+        // populate output_indices
         output_indices.reserve_exact(compute_nodes.len());
         let mut accumm = 0;
         for node in compute_nodes.iter() {
@@ -170,29 +171,28 @@ pub fn sorted_to_exec(sorted: &SortedGraph, factory: impl NodeFactory) -> anyhow
             accumm += node.output_len();
         }
     }
-    
-    let  exec = DynLinearExec::new(compute_nodes.into_iter());
 
-//     // setup the connections
-//     for ((i,node),computenode) in std::iter::zip(sorted.iter().enumerate(),compute_nodes.iter()) {
-//         // for each real port:
-//         let input_indices = computenode.inputs().iter().map(|p| {
-//             // Look for an incoming connection
-//             let connection = node
-//                 .incoming_connections
-//                 .iter()
-//                 .find(|c| c.to_port == p.name)
-//                 .ok_or_else(|| anyhow!("Missing connection for input {}", p.name))?;
-//             // Find the output node
-//             let from_position = sorted.node_position(&connection.from_id).ok_or_else(|| anyhow!("Could not find now for connection {}", p.name))?;
-//             let from_port_index = 0; //compute_nodes[from_position].o XXX
+    let exec = DynLinearExec::new(compute_nodes.into_iter());
 
-//             Ok(output_indices[from_position] + from_port_index)
-// //            let output_node = sorted.sorted_node(connection.from_index);
-//         }).collect::<anyhow::Result<Vec<_>>>()?;
-//         exec.inputs(i, input_indices);
-//     }
+    //     // setup the connections
+    //     for ((i,node),computenode) in std::iter::zip(sorted.iter().enumerate(),compute_nodes.iter()) {
+    //         // for each real port:
+    //         let input_indices = computenode.inputs().iter().map(|p| {
+    //             // Look for an incoming connection
+    //             let connection = node
+    //                 .incoming_connections
+    //                 .iter()
+    //                 .find(|c| c.to_port == p.name)
+    //                 .ok_or_else(|| anyhow!("Missing connection for input {}", p.name))?;
+    //             // Find the output node
+    //             let from_position = sorted.node_position(&connection.from_id).ok_or_else(|| anyhow!("Could not find now for connection {}", p.name))?;
+    //             let from_port_index = 0; //compute_nodes[from_position].o XXX
 
+    //             Ok(output_indices[from_position] + from_port_index)
+    // //            let output_node = sorted.sorted_node(connection.from_index);
+    //         }).collect::<anyhow::Result<Vec<_>>>()?;
+    //         exec.inputs(i, input_indices);
+    //     }
 
     Ok(exec)
 }
@@ -307,7 +307,7 @@ mod tests {
         let sorted = pod_to_sorted(&graph).unwrap();
         assert_eq!(sorted.sort, vec![0, 1]);
 
-        let mut _exec = sorted_to_exec(&sorted, TestFactory{}).unwrap();
+        let mut _exec = sorted_to_exec(&sorted, TestFactory {}).unwrap();
         //  let count = exec.run().unwrap();
         //  assert_eq!(count, 2);
     }
