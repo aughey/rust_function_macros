@@ -1,3 +1,4 @@
+#![feature(type_alias_impl_trait)] // So using type aliases for impl Trait works without headaches
 //use ive_macros::make_dynamicable;
 
 use ive_macros::make_dynamicable;
@@ -7,6 +8,7 @@ pub mod gentest;
 pub mod graph;
 pub mod descriptive_ive;
 pub mod linear_execution;
+pub mod node_description;
 
 #[make_dynamicable()]
 pub fn zero() -> i32 {
