@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, spanned::Spanned, ItemFn, Type};
+use syn::{spanned::Spanned, ItemFn};
 
 pub type TokenResult<O> = Result<O, syn::Error>;
 
@@ -51,7 +51,7 @@ struct FnArgWrapper<'a> {
 impl<'a> FnArgWrapper<'a> {
     fn typed(&self) -> TokenResult<PatTypeWrapper> {
         match self.arg {
-            syn::FnArg::Typed(ty) => Ok(PatTypeWrapper { ty: ty }),
+            syn::FnArg::Typed(ty) => Ok(PatTypeWrapper { ty }),
             _ => Err(syn::Error::new(self.arg.span(), "Expected typed argument")),
         }
     }
@@ -86,7 +86,7 @@ impl<'a> FunctionWrapper<'a> {
     fn output(&self) -> Option<TypeWrapper<'a>> {
         match &self.input_fn.sig.output {
             syn::ReturnType::Default => None,
-            syn::ReturnType::Type(_, ty) => Some(TypeWrapper { ty: ty }),
+            syn::ReturnType::Type(_, ty) => Some(TypeWrapper { ty }),
         }
     }
 }
@@ -289,8 +289,7 @@ pub fn make_dynamicable_work(f: ItemFn) -> TokenResult<TokenStream> {
     Ok(quote! {
         #f
         #wrapper
-    }
-    .into())
+    })
 }
 
 fn pull_inputs<'a>(
@@ -312,7 +311,7 @@ fn pull_inputs<'a>(
     Ok(tokens)
 }
 
-fn store_outputs(output: &TypeWrapper) -> TokenResult<TokenStream> {
+fn store_outputs(_output: &TypeWrapper) -> TokenResult<TokenStream> {
     //    let output_type = output.ty.to_token_stream().into_iter().map(|t| t.to_string());
     Ok(quote! {
         outputs.some(0, output);
