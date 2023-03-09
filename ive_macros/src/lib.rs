@@ -1,11 +1,19 @@
+mod make_dynamicable_work;
+
+use anyhow::{anyhow, Result};
 use convert_case::{Case, Casing};
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, ItemFn, Type};
+use syn::{parse_macro_input, spanned::Spanned, ItemFn, Type};
 
 fn type_to_string(kind: &Type) -> String {
     kind.to_token_stream().to_string()
 }
+
+fn type_to_strings(kind: &Type) -> impl Iterator<Item = String> {
+    kind.to_token_stream().into_iter().map(|x| x.to_string())
+}
+
 
 // fn temp_vars(count: usize) -> Vec<Ident> {
 //     (0..count)
@@ -107,7 +115,7 @@ where
 }
 
 #[proc_macro]
-pub fn ive_chain(input: TokenStream) -> TokenStream {
+pub fn ive_chain(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let count = parse_macro_input!(input as syn::LitInt);
     let count = count.base10_parse::<usize>().unwrap();
 
@@ -270,14 +278,79 @@ pub fn ive_chain(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn run_node(input: TokenStream) -> TokenStream {
+pub fn run_node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let _args = parse_macro_input!(input as syn::Expr);
 
     quote!({}).into()
 }
 
+
+// fn to_function_desc(input_fn : ItemFn) -> FunctionDesc {
+//     let name = input_fn.sig.ident.to_string();
+//     let template_args = input_fn
+//     .sig
+//     .generics
+//     .type_params()
+//     .map(|ty| ty.ident.to_string())
+//     .collect::<Vec<_>>();
+
+//     let inputs = input_fn.sig.inputs.iter().map(|input| {
+//         let ty = match input {
+//             syn::FnArg::Typed(ty) => type_to_string(&ty.ty),
+//             _ => "void".to_string(),
+//         };
+
+//         let name = match input {
+//             FnArg::Receiver(_) => panic!("Can't have a receiver"),
+//             FnArg::Typed(pat) => match &*pat.pat {
+//                 Pat::Ident(ident) => ident.ident.to_string(),
+//                 _ => panic!("Can't have a non-ident pattern"),
+//             },
+//         };
+//         let is_ref = match &*pat.ty {
+//             Type::Reference(_) => true,
+//             _ => false,
+//         };
+//         let kind = match &*pat.ty {
+//             Type::Reference(ty) => match &*ty.elem {
+//                 Type::Path(ty) => ty.path.segments.iter().map(|seg| seg.ident.to_string()).collect(),
+//                 _ => panic!("Can't have a non-path type"),
+//             },
+//             Type::Path(ty) => ty.path.segments.iter().map(|seg| seg.ident.to_string()).collect(),
+//             _ => panic!("Can't have a non-path type"),
+//         };
+//         PortDesc { name, is_ref, kind }
+//     }).collect();
+//     let outputs = match &input_fn.sig.output {
+//         ReturnType::Default => Vec::<PortDesc>::new(),
+//         ReturnType::Type(_, ty) => match &**ty {
+//             Type::Tuple(ty) => ty.elems.iter().map(|ty| {
+//                 let name = match &*ty {
+//                     Type::Reference(_) => panic!("Can't have a receiver"),
+//                     Type::Path(ty) => ty.path.segments.iter().map(|seg| seg.ident.to_string()).collect(),
+//                     _ => panic!("Can't have a non-path type"),
+//                 };
+//                 let is_ref = match &*pat.ty {
+//                     Type::Reference(_) => true,
+//                     _ => false,
+//                 };
+//                 let kind = match &*pat.ty {
+//                     Type::Reference(ty) => match &*ty.elem {
+//                         Type::Path(ty) => ty.path.segments.iter().map(|seg| seg.ident.to_string()).collect(),
+//                         _ => panic!("Can't have a non-path type"),
+//                     },
+//                     Type::Path(ty) => ty.path.segments.iter().map(|seg| seg.ident.to_string()).collect(),
+//                     _ => panic!("Can't have a non-path type"),
+//                 };
+//                 PortDesc { name, is_ref, kind }
+//             }).collect(),
+// }
+
 #[proc_macro_attribute]
-pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
+pub fn node(
+    _metadata: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
 
     let name = input_fn.sig.ident.to_string();
@@ -362,191 +435,19 @@ pub fn node(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 //     }
 // }
 
+
+
 #[proc_macro_attribute]
-pub fn make_dynamicable(_metadata: TokenStream, stream: TokenStream) -> TokenStream {
+pub fn make_dynamicable(
+    _metadata: proc_macro::TokenStream,
+    stream: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let input: ItemFn = syn::parse(stream).unwrap();
 
-    let ItemFn {
-        attrs,
-        vis,
-        sig,
-        block,
-    } = input;
-
-    // Pull apart sig
-    let fnname = &sig.ident;
-    let inputs = &sig.inputs;
-    let input_len = inputs.len();
-
-    let dyncall_name = format_ident!("{}DynCall", fnname.to_string().to_case(Case::Pascal));
-
-    enum DecomposableType {
-        Option,
-        Result,
+    match make_dynamicable_work::make_dynamicable_work(input) {
+        Ok(output) => output.into(),
+        Err(e) => e.into_compile_error().into(),
     }
-    struct InputType {
-        ty: proc_macro2::TokenStream,
-        name: Box<syn::Pat>,
-        is_ref: bool,
-    }
-
-    let input_types = inputs.iter().map(|arg| match arg {
-        syn::FnArg::Typed(pat_ty) => match &*pat_ty.ty {
-            syn::Type::Reference(ty) => {
-                if ty.mutability.is_some() {
-                    panic!("Cannot have a mutable reference as an input");
-                }
-                let ty = &*ty.elem;
-                InputType {
-                    ty: quote! {#ty},
-                    name: pat_ty.pat.clone(),
-                    is_ref: true,
-                }
-            }
-            syn::Type::Path(ty) => {
-                let ty = &ty.path;
-                let first = ty.segments.first().unwrap().ident.to_string();
-                if ty.segments.len() == 1 && COPYABLE_TYPES.iter().any(|v| *v == first.as_str()) {
-                    InputType {
-                        ty: quote! {#ty},
-                        name: pat_ty.pat.clone(),
-                        is_ref: false,
-                    }
-                } else {
-                    panic!("Cannot have a non-copyable type as an input");
-                }
-            }
-            _ => panic!("Expected typed argument"),
-        },
-        _ => panic!("Expected typed argument"),
-    });
-
-    let input_pull = input_types.clone().enumerate().map(|(i, ty)| {
-        let kind = ty.ty;
-        if ty.is_ref {
-            quote! {
-            //    inputs[#i].value::<#kind>()
-                inputs.fetch::<#kind>(#i)?
-            }
-        } else {
-            quote! {
-                //*inputs[#i].value::<#kind>()
-                *inputs.fetch::<#kind>(#i)?
-            }
-        }
-    });
-
-    // Look at the output and see if it's a special type we might be able to decompose.
-    // (Optional or Result)
-    let output_type = if let syn::ReturnType::Type(_, ty) = &sig.output {
-        match &**ty {
-            syn::Type::Path(ty) => {
-                let ty = &ty.path;
-                let first = ty.segments.first().unwrap().ident.to_string();
-                match (ty.segments.len(), first.as_str()) {
-                    (1, "Option") => Some(DecomposableType::Option),
-                    (1, "Result") => Some(DecomposableType::Result),
-                    _ => None,
-                }
-            }
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    let input_info = input_types
-        .map(|ty| {
-            let name = ty.name.to_token_stream().to_string();
-            let kind = ty.ty.to_token_stream().into_iter().map(|t| t.to_string());
-            quote! {
-                ive::dyn_call::DynPort {
-                    name: #name,
-                    kind: vec![#(#kind.to_string()),*]
-                }
-            }
-        });
-            
-
-    let output_info = match &sig.output {
-        syn::ReturnType::Type(_, ty) => ty
-            .to_token_stream()
-            .into_iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<_>>(),
-        _ => vec![],
-    };
-
-    let output_len = match output_type {
-        Some(DecomposableType::Option) => 2,
-        Some(DecomposableType::Result) => 2,
-        None => 1,
-    };
-    let output_len = quote! {#output_len as usize};
-
-    let output_store = match output_type {
-        Some(DecomposableType::Option) => {
-            quote! {
-                if let Some(output) = output {
-                    outputs.some(0,output);
-                    outputs.none(1);
-                } else {
-                    outputs.none(0);
-                    outputs.some(1,true);
-                }
-            }
-        }
-        Some(DecomposableType::Result) => {
-            quote! {
-                match output {
-                    Ok(output) => {
-                        outputs.some(0,output);
-                        outputs.none(1);
-                    },
-                    Err(e) => {
-                        outputs.none(0);
-                        outputs.some(1,e);
-                    }
-                }
-            }
-        }
-        None => {
-            quote! {
-                outputs.some(0,output);
-            }
-        }
-    };
-
-    let wrapper = quote! {
-        pub struct #dyncall_name;
-        impl ive::dyn_call::DynCall for #dyncall_name {
-            fn call(&self, inputs: &ive::dyn_call::InputGetter, outputs: &mut ive::dyn_call::OutputSetter) -> ive::dyn_call::DynCallResult {
-                assert_eq!(inputs.len(), #input_len, "Expected {} inputs, got {}", #input_len, inputs.len());
-                assert_eq!(outputs.len(), #output_len, "Expected {} outputs, got {}", #output_len, outputs.len());
-                let output = #fnname(#(#input_pull),*);
-                #output_store
-                Ok(())
-            }
-            fn input_len(&self) -> usize {
-                #input_len
-            }
-            fn output_len(&self) -> usize {
-                #output_len
-            }
-            fn inputs(&self) -> Vec::<ive::dyn_call::DynPort> {
-                vec![ #(#input_info),*]
-            }
-            fn output_type(&self) -> &'static[&'static str] {
-                &[ #(#output_info),* ]
-            }
-        }
-    };
-
-    quote! {
-        #(#attrs)* #vis #sig #block
-        #wrapper
-    }
-    .into()
 }
 
 const COPYABLE_TYPES: &[&str] = &[
@@ -662,3 +563,4 @@ const COPYABLE_TYPES: &[&str] = &[
     "NamePadding",
     "TestId",
 ];
+

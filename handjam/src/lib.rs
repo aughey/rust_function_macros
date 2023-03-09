@@ -8,7 +8,6 @@ pub mod gentest;
 pub mod graph;
 pub mod descriptive_ive;
 pub mod linear_execution;
-pub mod node_description;
 
 #[make_dynamicable()]
 pub fn zero() -> i32 {
