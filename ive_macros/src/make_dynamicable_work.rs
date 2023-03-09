@@ -297,7 +297,8 @@ fn pull_inputs<'a>(
     inputs: impl Iterator<Item = FnArgWrapper<'a>>,
 ) -> TokenResult<Vec<TokenStream>> {
     let pull = inputs.enumerate().map(|(i, ty)| {
-        let deref = if ty.is_ref()? {
+        eprintln!("{}",ty.tokens().unwrap());
+        let deref = if !ty.is_ref()? {
             quote! { * }
         } else {
             quote! {}
