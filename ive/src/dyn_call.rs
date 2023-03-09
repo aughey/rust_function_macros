@@ -35,6 +35,7 @@ pub type AnyOutputs<'a> = [OptionalValue];
 pub type DynCallResult = Result<(), Box<dyn std::error::Error>>;
 pub trait DynCall {
     fn call(&self, inputs: &InputGetter, outputs: &mut OutputSetter) -> DynCallResult;
+    fn kind(&self) -> &'static str;
     fn input_len(&self) -> usize;
     fn output_len(&self) -> usize;
     fn inputs(&self) -> Vec<DynPort>;
@@ -87,7 +88,11 @@ struct ExecNode {
 }
 impl ExecNode {
     fn num_inputs(&self) -> usize {
-        assert_eq!(self.call.input_len(), self.input_indices.len(), "Dev Error: Node input length mismatch");
+        assert_eq!(
+            self.call.input_len(),
+            self.input_indices.len(),
+            "Dev Error: Node input length mismatch"
+        );
         self.input_indices.len()
     }
     fn num_outputs(&self) -> usize {
@@ -144,11 +149,12 @@ impl<'a> InputGetter<'a> {
     where
         T: 'static + std::any::Any,
     {
-        self.values[self.indices[index]]
-            .as_ref()
-            .ok_or(DynExecError::FetchNone)?
-            //.unwrap()
-            .value::<T>()
+        let value = &self.values[self.indices[index]];
+        let value = value.as_ref();
+        let value = value.ok_or(DynExecError::FetchNone)?;
+        //.unwrap()
+        let value = value.value::<T>();
+        value
     }
     pub fn len(&self) -> usize {
         self.indices.len()
@@ -161,15 +167,15 @@ pub struct OutputSetter<'a> {
     values: &'a mut [OptionalValue],
     set_count: usize,
 }
-impl Drop for OutputSetter<'_> {
-    fn drop(&mut self) {
-        assert_eq!(
-            self.set_count,
-            self.values.len(),
-            "Not all outputs were set"
-        );
-    }
-}
+// impl Drop for OutputSetter<'_> {
+//     fn drop(&mut self) {
+//         assert_eq!(
+//             self.set_count,
+//             self.values.len(),
+//             "Not all outputs were set"
+//         );
+//     }
+// }
 impl<'a> OutputSetter<'a> {
     pub fn some<T>(&mut self, index: usize, value: T)
     where
@@ -292,11 +298,7 @@ impl DynLinearExec {
                 {
                     let num_in = node.num_inputs();
                     let input_indicides = node.input_indices.len();
-                    assert_eq!(
-                        num_in,
-                        input_indicides,
-                        "Input indices not set correctly"
-                    );
+                    assert_eq!(num_in, input_indicides, "Input indices not set correctly");
                 }
 
                 // By definition, the inputs must be earlier in the store
@@ -335,6 +337,8 @@ impl DynLinearExec {
                         values: outputs,
                         set_count: 0,
                     };
+
+                    let current_kind = node.call.kind();
 
                     node.call.call(&fetch, &mut setter)?;
 

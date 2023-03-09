@@ -94,7 +94,7 @@ fn zero() -> i32 {
 
 
 
-use ive::dyn_call::{box_dyn_call, DirtyEnum, DynLinearExec};
+use ive::dyn_call::{box_dyn_call, DirtyEnum, DynLinearExec, DynCall};
 
 #[test]
 fn test_loop() {
@@ -142,13 +142,18 @@ fn test_dyn_string_ops() {
         input.to_owned() + input
     }
 
-    let mut exec = DynLinearExec::new_linear_chain(
-        vec![
-            box_dyn_call(JohnAugheyDynCall {}),
-            box_dyn_call(StringDoubleDynCall {}),
-        ]
-        .into_iter(),
-    );
+    let sddc = StringDoubleDynCall {};
+    assert_eq!(sddc.input_len(),1);
+    
+    let chain = vec![
+        box_dyn_call(JohnAugheyDynCall {}),
+        box_dyn_call(StringDoubleDynCall {}),
+    ];
+    assert_eq!(chain[1].input_len(),1);
+    assert_eq!(chain[1].output_len(),1);
+
+    let mut exec = DynLinearExec::new_linear_chain(chain.into_iter());
+
     let count = exec.run().expect("failed to run");
     assert_eq!(count, 2);
     assert_eq!(exec.value::<String>(0).unwrap(), &"John Aughey");

@@ -6,12 +6,7 @@ use syn::{spanned::Spanned, ItemFn};
 
 pub type TokenResult<O> = Result<O, syn::Error>;
 
-struct PathWrapper<'a> {
-    path: &'a syn::Path,
-}
-struct ReferenceTypeWrapper<'a> {
-    rt: &'a syn::TypeReference,
-}
+
 struct TypeWrapper<'a> {
     ty: &'a syn::Type,
 }
@@ -66,6 +61,10 @@ impl<'a> FnArgWrapper<'a> {
 
     fn name(&self) -> TokenResult<syn::Ident> {
         self.typed()?.name()
+    }
+
+    fn span(&self) -> proc_macro2::Span {
+        self.arg.span()
     }
 }
 struct FunctionWrapper<'a> {
@@ -296,15 +295,22 @@ fn pull_inputs<'a>(
     inputs: impl Iterator<Item = FnArgWrapper<'a>>,
 ) -> TokenResult<Vec<TokenStream>> {
     let pull = inputs.enumerate().map(|(i, ty)| {
-        eprintln!("{}",ty.tokens().unwrap());
+        let mut tokens = ty.tokens()?.into_iter();
         let deref = if !ty.is_ref()? {
+            let first = ty.tokens()?.into_iter().next().ok_or_else(|| syn::Error::new(ty.span(), "expected a type"))?.to_string();
+
+            if !COPYABLE_TYPES.iter().any(|v| *v == first.as_str()) {
+                return Err(syn::Error::new(ty.span(), "non-ref argument must be copyable"))
+            }
             quote! { * }
         } else {
+            // there's a & in the front, strip it off
+            tokens.next();
             quote! {}
         };
-        let ty = ty.tokens()?;
+        let tokens = tokens.collect::<TokenStream>();
         Ok(quote! {
-             #deref inputs.fetch::<#ty>(#i)?
+             #deref inputs.fetch::<#tokens>(#i)?
         })
     });
     let tokens = pull.collect::<TokenResult<Vec<_>>>()?;
@@ -327,10 +333,11 @@ fn input_len(fw: &FunctionWrapper) -> TokenStream {
     }
 }
 
-fn output_len(_fw: &FunctionWrapper) -> TokenStream {
+fn output_len(fw: &FunctionWrapper) -> TokenStream {
+    let len = if let Some(_) = fw.output() { 1usize } else { 0usize };
     quote! {
         fn output_len(&self) -> usize {
-            1
+            #len
         }
     }
 }
@@ -397,6 +404,7 @@ fn inputs_dyncall(fw: &FunctionWrapper) -> TokenResult<TokenStream> {
 }
 
 fn impl_dyncall(fw: &FunctionWrapper) -> TokenResult<TokenStream> {
+    let fnname = fw.name().to_string();
     let call = call_dyncall(fw)?;
     let il_fn = input_len(fw);
     let ol_fn = output_len(fw);
@@ -408,6 +416,9 @@ fn impl_dyncall(fw: &FunctionWrapper) -> TokenResult<TokenStream> {
         #ol_fn
         #inputs
         #output_type
+        fn kind(&self) -> &'static str {
+            #fnname
+        }
     })
 }
 
@@ -424,14 +435,130 @@ fn create_dyn_wrapper(fw: &FunctionWrapper) -> TokenResult<TokenStream> {
     })
 }
 
+const COPYABLE_TYPES: &[&str] = &[
+    "std::cmp::Ordering",
+    "Infallible",
+    "std::fmt::Alignment",
+    "ErrorKind",
+    "SeekFrom",
+    "IpAddr",
+    "Ipv6MulticastScope",
+    "Shutdown",
+    "SocketAddr",
+    "FpCategory",
+    "BacktraceStyle",
+    "Which",
+    "SearchStep",
+    "std::sync::atomic::Ordering",
+    "RecvTimeoutError",
+    "TryRecvError",
+    "bool",
+    "char",
+    "f32",
+    "f64",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "i128",
+    "isize",
+    "!",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "u128",
+    "()",
+    "usize",
+    "CpuidResult",
+    "__m128",
+    "__m128bh",
+    "__m128d",
+    "__m128i",
+    "__m256",
+    "__m256bh",
+    "__m256d",
+    "__m256i",
+    "__m512",
+    "__m512bh",
+    "__m512d",
+    "__m512i",
+    "AllocError",
+    "Global",
+    "Layout",
+    "System",
+    "TypeId",
+    "TryFromSliceError",
+    "CharTryFromError",
+    "TryFromCharError",
+    "Error",
+    "FileTimes",
+    "FileType",
+    "Empty",
+    "Sink",
+    "Assume",
+    "Ipv4Addr",
+    "Ipv6Addr",
+    "SocketAddrV4",
+    "SocketAddrV6",
+    "NonZeroI8",
+    "NonZeroI16",
+    "NonZeroI32",
+    "NonZeroI64",
+    "NonZeroI128",
+    "NonZeroIsize",
+    "NonZeroU8",
+    "NonZeroU16",
+    "NonZeroU32",
+    "NonZeroU64",
+    "NonZeroU128",
+    "NonZeroUsize",
+    "TryFromIntError",
+    "RangeFull",
+    "UCred",
+    "ExitCode",
+    "ExitStatus",
+    "ExitStatusError",
+    "std::ptr::Alignment",
+    "Utf8Error",
+    "RecvError",
+    "WaitTimeoutResult",
+    "RawWakerVTable",
+    "AccessError",
+    "ThreadId",
+    "Duration",
+    "Instant",
+    "SystemTime",
+    "PhantomPinned",
+    "Level",
+    "Span",
+    "LineColumn",
+    "Delimiter",
+    "Spacing",
+    "Metric",
+    "ShouldPanic",
+    "ColorConfig",
+    "OutputFormat",
+    "RunIgnored",
+    "RunStrategy",
+    "Options",
+    "Summary",
+    "TestTimeOptions",
+    "TestType",
+    "NamePadding",
+    "TestId",
+];
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn test_make_dynamicable() {
         let testfn = quote!(
-            pub fn testfn(a: i32, b: i32) -> i32 {
-                a + b
+            fn string_double(input: &String) -> String {
+                input.to_owned() + input
             }
         );
         let parsed = syn::parse2::<syn::ItemFn>(testfn).unwrap();
@@ -439,3 +566,4 @@ mod tests {
         eprintln!("{}", output);
     }
 }
+
