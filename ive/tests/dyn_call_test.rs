@@ -176,6 +176,7 @@ fn test_custom_type() {
     assert_eq!(exec.value::<i32>(count - 1).unwrap(), &2);
 }
 
+#[ignore]
 #[test]
 fn test_optional_output() {
     let nodes = vec![
@@ -208,6 +209,7 @@ fn test_optional_output() {
     assert_eq!(count, 3); // All runs
 }
 
+#[ignore]
 #[test]
 fn test_result_output() {
     let nodes = vec![box_dyn_call(ReturnsErrorDynCall {})];

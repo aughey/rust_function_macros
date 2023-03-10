@@ -338,7 +338,7 @@ impl DynLinearExec {
                         set_count: 0,
                     };
 
-                    let current_kind = node.call.kind();
+                  //  let current_kind = node.call.kind();
 
                     node.call.call(&fetch, &mut setter)?;
 
