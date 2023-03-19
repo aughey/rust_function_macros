@@ -18,6 +18,18 @@ fn test_function(a: &u32, b: &u32) -> u32 {
     a + b
 }
 
+fn test_special(a: &u32, b: &u32) -> u32 {
+    a * b
+}
+
+impl IntoDynCaller<DynCallMarker> for fn(&u32) -> u32 {
+    fn into_dyn_caller(self) -> Box<DynamicCall> {
+        Box::new(move |inputs, outputs| {
+            outputs.some(0, 12345);
+        })
+    }
+}
+
 fn run_fn_2<A, B, R>(f: fn(&A, &B) -> R, a: &dyn Any, b: &dyn Any) -> Box<dyn Any>
 where
     R: Any,
@@ -30,7 +42,7 @@ where
     Box::new(r)
 }
 
-fn test_function_one_param(a: u32) -> u32 {
+fn test_function_one_param(a: &u32) -> u32 {
     a * 2
 }
 
@@ -56,7 +68,9 @@ where
     }
 }
 
+
 pub struct DynCallMarker;
+
 impl<Func, A1, A2, R> IntoDynCaller<(DynCallMarker, A1, A2, R)> for Func
 where
     Func: Fn(&A1, &A2) -> R+ 'static,
@@ -193,7 +207,7 @@ fn test_regisetr() {
 
 #[test]
 fn test_test_function_one_param() {
-    let res = test_function_one_param(3);
+    let res = test_function_one_param(&3);
     assert_eq!(res, 6);
 }
 
@@ -201,8 +215,10 @@ fn test_test_function_one_param() {
 fn test_callers() {
     let mut callers = Callers::default();
     callers.register("test", test_function);
+    callers.register("test_one", test_function_one_param);
+    callers.register("test_special", test_special);
 
-    let inputs = vec![Some(BoxedAny::new(1u32)), Some(BoxedAny::new(2u32))];
+    let inputs = vec![Some(BoxedAny::new(5u32)), Some(BoxedAny::new(2u32))];
     let mut outputs: Vec<Option<BoxedAny>> = vec![None];
 
     assert!(outputs[0].is_none());
@@ -219,4 +235,36 @@ fn test_callers() {
     }
 
     assert!(outputs[0].is_some());
+    assert_eq!(outputs[0].as_ref().unwrap().value::<u32>().unwrap(), &7u32);
+
+    {
+        let input_getter = InputGetter::new(
+            inputs.as_slice(),
+            &[0]);
+
+        let mut output_setter = OutputSetter::new(
+            outputs.as_mut_slice());
+
+        let caller = callers.callers.get("test_one").unwrap();
+        caller(&input_getter, &mut output_setter);
+    }
+
+    assert!(outputs[0].is_some());
+    assert_eq!(outputs[0].as_ref().unwrap().value::<u32>().unwrap(), &10u32);
+
+    {
+        let input_getter = InputGetter::new(
+            inputs.as_slice(),
+            &[0,1]);
+
+        let mut output_setter = OutputSetter::new(
+            outputs.as_mut_slice());
+
+        let caller = callers.callers.get("test_special").unwrap();
+        caller(&input_getter, &mut output_setter);
+    }
+
+    assert!(outputs[0].is_some());
+    assert_eq!(outputs[0].as_ref().unwrap().value::<u32>().unwrap(), &12345u32);
+
 }
