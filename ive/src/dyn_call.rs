@@ -10,7 +10,7 @@ pub struct BoxedAny {
     any: Box<dyn std::any::Any>,
 }
 impl BoxedAny {
-    fn new<T>(value: T) -> BoxedAny
+    pub fn new<T>(value: T) -> BoxedAny
     where
         T: 'static + std::any::Any,
     {
@@ -145,6 +145,9 @@ pub struct InputGetter<'a> {
     indices: &'a [usize],
 }
 impl<'a> InputGetter<'a> {
+    pub fn new(values: &'a [OptionalValue], indices: &'a [usize]) -> Self {
+        Self { values, indices }
+    }
     pub fn fetch<T>(&'a self, index: usize) -> Result<&'a T, Box<dyn std::error::Error>>
     where
         T: 'static + std::any::Any,
@@ -177,6 +180,12 @@ pub struct OutputSetter<'a> {
 //     }
 // }
 impl<'a> OutputSetter<'a> {
+    pub fn new(values: &'a mut [OptionalValue]) -> Self {
+        Self {
+            values,
+            set_count: 0,
+        }
+    }
     pub fn some<T>(&mut self, index: usize, value: T)
     where
         T: 'static + std::any::Any,
