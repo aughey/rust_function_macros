@@ -4,6 +4,28 @@ fn add_two_numbers(a: u32, b: u32) -> u32 {
     a + b
 }
 
+use std::any::{Any, TypeId};
+
+fn get_value<T: 'static>(value: &dyn Any) -> Option<T> {
+    if value.type_id() == TypeId::of::<T>() {
+        match value.downcast_ref::<T>() {
+            Some(val) => {
+                if std::any::type_name::<T>().ends_with("&") {
+                    // Return reference
+                    Some(val)
+                } else {
+                    // Return copy
+                    Some(*val)
+                }
+            }
+            None => None,
+        }
+    } else {
+        None
+    }
+}
+
+
 fn add_two_numbers_dyn(a: &dyn Any, b: &dyn Any) -> Box<dyn Any> {
     let a = a.downcast_ref::<u32>().unwrap();
     let b = b.downcast_ref::<u32>().unwrap();
