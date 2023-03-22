@@ -1,29 +1,28 @@
-use std::any::Any;
+use std::any::{Any};
 
 fn add_two_numbers(a: u32, b: u32) -> u32 {
     a + b
 }
 
-use std::any::{Any, TypeId};
 
-fn get_value<T: 'static>(value: &dyn Any) -> Option<T> {
-    if value.type_id() == TypeId::of::<T>() {
-        match value.downcast_ref::<T>() {
-            Some(val) => {
-                if std::any::type_name::<T>().ends_with("&") {
-                    // Return reference
-                    Some(val)
-                } else {
-                    // Return copy
-                    Some(*val)
-                }
-            }
-            None => None,
-        }
-    } else {
-        None
-    }
-}
+// fn get_value<T: 'static>(value: &dyn Any) -> Option<T> {
+//     if value.type_id() == TypeId::of::<T>() {
+//         match value.downcast_ref::<T>() {
+//             Some(val) => {
+//                 if std::any::type_name::<T>().ends_with("&") {
+//                     // Return reference
+//                     Some(val)
+//                 } else {
+//                     // Return copy
+//                     Some(*val)
+//                 }
+//             }
+//             None => None,
+//         }
+//     } else {
+//         None
+//     }
+// }
 
 
 fn add_two_numbers_dyn(a: &dyn Any, b: &dyn Any) -> Box<dyn Any> {
@@ -33,10 +32,10 @@ fn add_two_numbers_dyn(a: &dyn Any, b: &dyn Any) -> Box<dyn Any> {
     Box::new(r)
 }
 
-fn add_two_numbers_infer(a: &dyn Any, b: &dyn Any) -> Box<dyn Any> {
-    let r = add_two_numbers(a.downcast_ref::<u32>().unwrap().into(), b.downcast_ref::<u32>().unwrap().into());
-    Box::new(r)
-}
+// fn add_two_numbers_infer(a: &dyn Any, b: &dyn Any) -> Box<dyn Any> {
+//     let r = add_two_numbers(get_value(a).unwrap(), get_value(b).unwrap());
+//     Box::new(r)
+// }
 
 
 #[test]
