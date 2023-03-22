@@ -1,8 +1,6 @@
 mod make_dynamicable_work;
 
 
-
-
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, ItemFn, Type};
 
