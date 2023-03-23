@@ -7,5 +7,6 @@ members = [
     "raw_test",
     "prototype_network",
     "sample_nodes",
-    "handjam"
+    "handjam",
+    "fn_parser"
 ]
