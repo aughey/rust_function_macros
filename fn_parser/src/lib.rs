@@ -1,18 +1,24 @@
 use anyhow::Result;
 use quote::ToTokens;
+use serde::{Serialize, Deserialize};
 
 pub mod file_parsing;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TypeDefinition {
     pub tokens: Vec<String>,
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InputDefinition {
     pub name: String,
     pub ty: TypeDefinition,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FunctionDefinition {
+    pub is_pub: bool,
     pub name: String,
     pub inputs: Vec<InputDefinition>,
     pub output: TypeDefinition,
@@ -37,6 +43,8 @@ fn return_to_type_definition(ret: &syn::ReturnType) -> Result<TypeDefinition> {
 }
 
 pub fn function_to_function_definition(f: &syn::ItemFn) -> Result<FunctionDefinition> {
+    
+
     let inputs = f
         .sig
         .inputs
@@ -53,7 +61,13 @@ pub fn function_to_function_definition(f: &syn::ItemFn) -> Result<FunctionDefini
 
     let output = return_to_type_definition(&f.sig.output)?;
 
+    let is_pub = match f.vis {
+        syn::Visibility::Public(_) => true,
+        _ => false,
+    };
+
     Ok(FunctionDefinition {
+        is_pub,
         name: f.sig.ident.to_string(),
         inputs,
         output,
