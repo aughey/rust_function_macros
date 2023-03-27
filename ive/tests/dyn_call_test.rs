@@ -92,9 +92,7 @@ fn zero() -> i32 {
     0
 }
 
-
-
-use ive::dyn_call::{box_dyn_call, DirtyEnum, DynLinearExec, DynCall};
+use ive::dyn_call::{box_dyn_call, DirtyEnum, DynCall, DynLinearExec};
 
 #[test]
 fn test_loop() {
@@ -143,14 +141,14 @@ fn test_dyn_string_ops() {
     }
 
     let sddc = StringDoubleDynCall {};
-    assert_eq!(sddc.input_len(),1);
-    
+    assert_eq!(sddc.input_len(), 1);
+
     let chain = vec![
         box_dyn_call(JohnAugheyDynCall {}),
         box_dyn_call(StringDoubleDynCall {}),
     ];
-    assert_eq!(chain[1].input_len(),1);
-    assert_eq!(chain[1].output_len(),1);
+    assert_eq!(chain[1].input_len(), 1);
+    assert_eq!(chain[1].output_len(), 1);
 
     let mut exec = DynLinearExec::new_linear_chain(chain.into_iter());
 
