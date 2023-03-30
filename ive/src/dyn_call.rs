@@ -121,6 +121,7 @@ impl std::fmt::Display for DynExecError {
             DynExecError::FetchNone => write!(f, "Dev Error: Fetch None"),
             DynExecError::ValueIsNone => write!(f, "Dev Error: Value is None"),
         }
+        
     }
 }
 impl std::error::Error for DynExecError {}
